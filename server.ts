@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs/promises";
 import { Note, Flashcard } from "./src/types";
+import aiRouter from './src/api/ai';
 
 async function startServer() {
   const app = express();
@@ -26,6 +27,8 @@ async function startServer() {
   };
 
   // API Routes
+  app.use('/api/ai', aiRouter);
+
   app.get("/api/data", async (req, res) => {
     const data = await getData();
     res.json(data);

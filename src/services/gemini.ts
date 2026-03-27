@@ -1,7 +1,33 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 import { Note, Flashcard, ChatMessage } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Setup an API proxy that mirrors the GoogleGenAI interface but calls our backend API
+const ai = {
+  models: {
+    generateContent: async (params: any) => {
+      const response = await fetch('/api/ai/generateContent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to generate content: ${await response.text()}`);
+      }
+      return await response.json(); // { text: "..." }
+    },
+    embedContent: async (params: any) => {
+      const response = await fetch('/api/ai/embedContent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to embed content: ${await response.text()}`);
+      }
+      return await response.json();
+    }
+  }
+};
 
 export async function chatWithAI(messages: ChatMessage[], allNotes: Note[]) {
   const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.text || "";

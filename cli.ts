@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleAuth } from 'google-auth-library';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -8,12 +9,18 @@ dotenv.config();
 const API_URL = process.env.APP_URL || 'http://localhost:3000';
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
-if (!GEMINI_KEY) {
-  console.error("Error: GEMINI_API_KEY is not set in .env");
-  process.exit(1);
-}
+let ai: GoogleGenAI;
 
-const ai = new GoogleGenAI({ apiKey: GEMINI_KEY });
+if (!GEMINI_KEY || GEMINI_KEY === "AIzaSy..." || GEMINI_KEY.trim() === "") {
+  console.log("[CLI] GEMINI_API_KEY is not set or valid in .env. Falling back to GoogleAuth (ADC/OAuth).");
+  const auth = new GoogleAuth({
+    scopes: ['https://www.googleapis.com/auth/cloud-platform', 'https://www.googleapis.com/auth/generative-language']
+  });
+  // @ts-ignore
+  ai = new GoogleGenAI({ auth } as any);
+} else {
+  ai = new GoogleGenAI({ apiKey: GEMINI_KEY });
+}
 
 async function processFile(filePath: string) {
   console.log(`[CLI] Reading file: ${filePath}`);
