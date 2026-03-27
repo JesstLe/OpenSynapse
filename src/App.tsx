@@ -118,6 +118,10 @@ const appEnv = (import.meta as { env?: Record<string, string | boolean | undefin
 const DEV_AUTH_BYPASS_ENABLED = Boolean(appEnv?.DEV) && appEnv?.VITE_DISABLE_AUTH !== '0';
 const DEV_USER_ID = '__dev_local_user__';
 
+function isEmbeddingUnsupportedError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('embedding 仅支持 API Key 路径');
+}
+
 export default function App() {
   const [activeView, setActiveView] = useState<View>('chat');
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
@@ -257,19 +261,14 @@ export default function App() {
         const embeddingText = `${note.title} ${note.summary} ${note.tags.join(' ')}`;
         (note as any).embedding = await generateEmbedding(embeddingText);
       } catch (e) {
-        console.warn("Failed to generate embedding:", e);
+        if (!isEmbeddingUnsupportedError(e)) {
+          console.warn("Failed to generate embedding:", e);
+        }
       }
 
       // Find semantic links
       const relatedIds = await findSemanticLinks(note, notes);
       note.relatedIds = relatedIds;
-
-      // Save note to Firestore
-      try {
-        await setDoc(doc(db, 'notes', noteId), note);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `notes/${noteId}`);
-      }
 
       // Save flashcards to Firestore
       const cards: Flashcard[] = newFlashcards.map(cf => ({
@@ -291,6 +290,13 @@ export default function App() {
         setFlashcards(prev => [...cards, ...prev.filter(existing => !cards.some(card => card.id === existing.id))]);
         setActiveView('notes');
         return;
+      }
+
+      // Save note to Firestore
+      try {
+        await setDoc(doc(db, 'notes', noteId), note);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `notes/${noteId}`);
       }
 
       for (const card of cards) {
@@ -363,8 +369,8 @@ export default function App() {
   if (!isAuthReady || isLoadingData) {
     return (
       <div className="h-screen bg-[#0A0A0A] flex flex-col items-center justify-center gap-4">
-        <div className="w-12 h-12 rounded-2xl bg-orange-500 animate-pulse flex items-center justify-center">
-          <Brain className="w-8 h-8 text-white" />
+        <div className="w-16 h-16 rounded-2xl bg-orange-500/10 overflow-hidden flex items-center justify-center animate-pulse border border-orange-500/20">
+          <img src="/logo.png" className="w-12 h-12 object-contain" alt="OpenSynapse Logo" />
         </div>
         <p className="text-xs font-bold uppercase tracking-[0.3em] text-white/20">正在同步突触资产...</p>
       </div>
@@ -374,8 +380,8 @@ export default function App() {
   if (!user && !isUsingDevAuthBypass) {
     return (
       <div className="h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-6">
-        <div className="w-20 h-20 rounded-3xl bg-orange-500 flex items-center justify-center shadow-[0_0_40px_rgba(249,115,22,0.4)] mb-8">
-          <Brain className="w-12 h-12 text-white" />
+        <div className="w-24 h-24 rounded-3xl bg-orange-500/10 flex items-center justify-center shadow-[0_0_60px_rgba(249,115,22,0.2)] mb-8 overflow-hidden border border-orange-500/20">
+          <img src="/logo.png" className="w-20 h-20 object-contain" alt="OpenSynapse Logo" />
         </div>
         <h1 className="text-4xl font-black tracking-tighter mb-4 text-center">Synapse 突触</h1>
         <p className="text-white/40 text-center max-w-md mb-12 leading-relaxed">
@@ -400,8 +406,8 @@ export default function App() {
           className="p-6 flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
           onClick={() => setActiveView('dashboard')}
         >
-          <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center shadow-[0_0_20px_rgba(249,115,22,0.3)]">
-            <Brain className="w-6 h-6 text-white" />
+          <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center shadow-[0_0_20px_rgba(249,115,22,0.1)] overflow-hidden border border-orange-500/20">
+            <img src="/logo.png" className="w-8 h-8 object-contain" alt="Logo" />
           </div>
           <span className="font-bold text-lg tracking-tight">Synapse 突触</span>
         </div>

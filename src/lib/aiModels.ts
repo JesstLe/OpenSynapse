@@ -5,6 +5,7 @@ export interface AIModelOption {
 }
 
 export const DEFAULT_TEXT_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_STRUCTURED_MODEL = 'gemini-2.5-flash';
 export const EMBEDDING_MODEL = 'gemini-embedding-2-preview';
 export const TEXT_MODEL_STORAGE_KEY = 'opensynapse.preferred-text-model';
 

@@ -16,7 +16,7 @@ interface ChatViewProps {
   key?: string;
   notes: Note[];
   chatSessions: ChatSession[];
-  onProcess: (note: Partial<Note>, flashcards: Partial<Flashcard>[]) => void;
+  onProcess: (note: Partial<Note>, flashcards: Partial<Flashcard>[]) => Promise<void>;
   isProcessing: boolean;
   onBackToDashboard?: () => void;
   onSaveSession: (session: ChatSession) => Promise<void>;
@@ -74,6 +74,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
   const [showPdfOptions, setShowPdfOptions] = useState(false);
   const [customRange, setCustomRange] = useState({ start: 1, end: 20 });
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [isAssetProcessing, setIsAssetProcessing] = useState(false);
   const [showThinking, setShowThinking] = useState(true);
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState('');
@@ -86,6 +87,10 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
   const scrollRef = useRef<HTMLDivElement>(null);
   const isCustomModel = !isKnownTextModel(selectedModel);
   const currentModelOption = getModelOption(selectedModel);
+  const hasExtractableConversation =
+    messages.some((message) => message.role === 'user' && message.text.trim()) &&
+    messages.some((message, index) => index > 0 && message.role === 'model' && message.text.trim());
+  const isProcessBusy = isLoading || isProcessing || isAssetProcessing;
 
   const applyModel = (modelId: string) => {
     const nextModel = setPreferredTextModel(modelId);
@@ -387,17 +392,20 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
   };
 
   const handleProcess = async () => {
-    if (messages.length < 2 || isProcessing) return;
+    if (!hasExtractableConversation || isProcessBusy) return;
+    setIsAssetProcessing(true);
     try {
       const chatHistory = messages.map(m => `${m.role === 'user' ? '用户' : 'AI'}: ${m.text}`);
       const result = await processConversation(chatHistory);
-      onProcess(result.note, result.flashcards);
+      await onProcess(result.note, result.flashcards);
     } catch (error) {
       console.error('提取资产失败:', error);
       setMessages(prev => [...prev, {
         role: 'model',
         text: `⚠️ 提取资产失败：${getUserFacingAiError(error)}`,
       }]);
+    } finally {
+      setIsAssetProcessing(false);
     }
   };
 
@@ -627,16 +635,16 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               </button>
               <button
                 onClick={handleProcess}
-                disabled={messages.length < 3 || isProcessing}
+                disabled={!hasExtractableConversation || isProcessBusy}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm transition-all",
-                  messages.length < 3 || isProcessing
+                  !hasExtractableConversation || isProcessBusy
                     ? "bg-white/5 text-white/20 cursor-not-allowed"
                     : "bg-orange-500 hover:bg-orange-600 text-white shadow-[0_0_20px_rgba(249,115,22,0.2)] active:scale-95"
                 )}
               >
-                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {isProcessing ? "处理中..." : "提取资产"}
+                {isProcessBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {isProcessBusy ? "处理中..." : "提取资产"}
               </button>
             </div>
           </div>
@@ -648,7 +656,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
         className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide relative"
       >
         <AnimatePresence>
-          {(isProcessing || isDeconstructing) && (
+          {(isProcessing || isDeconstructing || isAssetProcessing) && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -674,7 +682,9 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                   className="absolute left-0 right-0 h-0.5 bg-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.8)]"
                 />
               </div>
-              <h3 className="text-xl font-bold mb-2">{isDeconstructing ? "正在深度解构文档..." : "正在提取知识资产..."}</h3>
+              <h3 className="text-xl font-bold mb-2">
+                {isDeconstructing ? "正在深度解构文档..." : "正在提取知识资产..."}
+              </h3>
               <p className="text-white/40 text-sm max-w-xs">
                 {isDeconstructing 
                   ? "AI 正在扫描文档中的底层逻辑，并将其转化为结构化笔记与闪卡。" 
