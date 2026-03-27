@@ -1,6 +1,5 @@
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
-import { GoogleAuth } from 'google-auth-library';
 import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
@@ -14,11 +13,11 @@ if (apiKey && apiKey !== "AIzaSy..." && apiKey.trim() !== "") {
     ai = new GoogleGenAI({ apiKey });
 } else {
     console.log("[Server] No valid GEMINI_API_KEY found. Initializing Gemini AI with GoogleAuth (ADC/OAuth).");
-    const auth = new GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/cloud-platform', 'https://www.googleapis.com/auth/generative-language']
+    ai = new GoogleGenAI({
+        googleAuthOptions: {
+            scopes: ['https://www.googleapis.com/auth/cloud-platform']
+        }
     });
-    // @ts-ignore: Internal property not exposed in typings
-    ai = new GoogleGenAI({ auth } as any);
 }
 
 router.post('/generateContent', async (req, res) => {
