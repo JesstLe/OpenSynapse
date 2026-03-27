@@ -114,6 +114,10 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+const appEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env;
+const DEV_AUTH_BYPASS_ENABLED = Boolean(appEnv?.DEV) && appEnv?.VITE_DISABLE_AUTH !== '0';
+const DEV_USER_ID = '__dev_local_user__';
+
 export default function App() {
   const [activeView, setActiveView] = useState<View>('chat');
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
@@ -126,6 +130,8 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [breakthroughConfig, setBreakthroughConfig] = useState<BreakthroughConfig | null>(null);
   const [noteEditMode, setNoteEditMode] = useState(false);
+  const isUsingDevAuthBypass = DEV_AUTH_BYPASS_ENABLED && !user;
+  const effectiveUserId = user?.uid ?? (isUsingDevAuthBypass ? DEV_USER_ID : null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -136,12 +142,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthReady || !user) {
-      if (isAuthReady && !user) {
+    if (!isAuthReady) {
+      return;
+    }
+
+    if (!user) {
+      if (!isUsingDevAuthBypass) {
         setNotes([]);
         setFlashcards([]);
-        setIsLoadingData(false);
+        setChatSessions([]);
       }
+      setIsLoadingData(false);
       return;
     }
 
@@ -189,7 +200,7 @@ export default function App() {
       unsubscribeCards();
       unsubscribeSessions();
     };
-  }, [isAuthReady, user]);
+  }, [isAuthReady, user, isUsingDevAuthBypass]);
 
   const handleLogin = async () => {
     try {
@@ -201,6 +212,15 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    if (isUsingDevAuthBypass) {
+      setNotes([]);
+      setFlashcards([]);
+      setChatSessions([]);
+      setSelectedNoteId(null);
+      setActiveView('dashboard');
+      setBreakthroughConfig(null);
+      return;
+    }
     try {
       await signOut(auth);
       setActiveView('dashboard');
@@ -216,7 +236,7 @@ export default function App() {
   };
 
   const handleSaveNote = async (newNoteData: Partial<Note>, newFlashcards: Partial<Flashcard>[]) => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     setIsProcessing(true);
     try {
       const noteId = crypto.randomUUID();
@@ -229,7 +249,7 @@ export default function App() {
         tags: newNoteData.tags || [],
         relatedIds: [],
         createdAt: Date.now(),
-        userId: user.uid,
+        userId: effectiveUserId,
       } as any;
 
       // Generate embedding for semantic search
@@ -263,8 +283,15 @@ export default function App() {
         difficulty: 0,
         repetitions: 0,
         state: 0,
-        userId: user.uid,
+        userId: effectiveUserId,
       } as any));
+
+      if (isUsingDevAuthBypass || !user) {
+        setNotes(prev => [note, ...prev.filter(existing => existing.id !== note.id)]);
+        setFlashcards(prev => [...cards, ...prev.filter(existing => !cards.some(card => card.id === existing.id))]);
+        setActiveView('notes');
+        return;
+      }
 
       for (const card of cards) {
         try {
@@ -283,7 +310,13 @@ export default function App() {
   };
 
   const handleDeleteNote = async (id: string) => {
-    if (!user) return;
+    if (!effectiveUserId) return;
+    if (isUsingDevAuthBypass || !user) {
+      setNotes(prev => prev.filter(note => note.id !== id));
+      setFlashcards(prev => prev.filter(card => card.noteId !== id));
+      if (selectedNoteId === id) setSelectedNoteId(null);
+      return;
+    }
     try {
       // Delete note
       try {
@@ -309,7 +342,11 @@ export default function App() {
   };
 
   const handleUpdateNote = async (updatedNote: Note) => {
-    if (!user) return;
+    if (!effectiveUserId) return;
+    if (isUsingDevAuthBypass || !user) {
+      setNotes(prev => prev.map(note => note.id === updatedNote.id ? updatedNote : note));
+      return;
+    }
     try {
       await setDoc(doc(db, 'notes', updatedNote.id), updatedNote);
     } catch (error) {
@@ -334,7 +371,7 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  if (!user && !isUsingDevAuthBypass) {
     return (
       <div className="h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-6">
         <div className="w-20 h-20 rounded-3xl bg-orange-500 flex items-center justify-center shadow-[0_0_40px_rgba(249,115,22,0.4)] mb-8">
@@ -405,13 +442,21 @@ export default function App() {
 
         <div className="p-4 border-t border-white/5 space-y-2">
           <div className="px-4 py-2 text-[10px] uppercase tracking-widest text-white/40 font-semibold">
-            账户
+            {isUsingDevAuthBypass ? '开发模式' : '账户'}
           </div>
           <div className="px-4 py-2 flex items-center gap-3">
-            <img src={user.photoURL || ''} className="w-8 h-8 rounded-full border border-white/10" alt={user.displayName || ''} />
+            {user?.photoURL ? (
+              <img src={user.photoURL} className="w-8 h-8 rounded-full border border-white/10" alt={user.displayName || ''} />
+            ) : (
+              <div className="w-8 h-8 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-xs font-bold text-white/60">
+                {isUsingDevAuthBypass ? 'DEV' : '?'}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold truncate">{user.displayName}</p>
-              <button onClick={handleLogout} className="text-[10px] text-white/40 hover:text-orange-400 transition-colors">退出登录</button>
+              <p className="text-xs font-bold truncate">{user?.displayName || '本地开发免登录'}</p>
+              <button onClick={handleLogout} className="text-[10px] text-white/40 hover:text-orange-400 transition-colors">
+                {isUsingDevAuthBypass ? '清空开发态' : '退出登录'}
+              </button>
             </div>
           </div>
         </div>
@@ -467,7 +512,13 @@ export default function App() {
               isProcessing={isProcessing}
               onBackToDashboard={() => setActiveView('dashboard')}
               onSaveSession={async (session) => {
-                if (!user) return;
+                if (isUsingDevAuthBypass || !user) {
+                  setChatSessions(prev => {
+                    const next = [sanitizeChatSession(session, effectiveUserId || DEV_USER_ID) as ChatSession, ...prev.filter(item => item.id !== session.id)];
+                    return next.sort((a, b) => b.updatedAt - a.updatedAt);
+                  });
+                  return;
+                }
                 try {
                   await setDoc(
                     doc(db, 'chat_sessions', session.id),
@@ -478,7 +529,10 @@ export default function App() {
                 }
               }}
               onDeleteSession={async (id) => {
-                if (!user) return;
+                if (isUsingDevAuthBypass || !user) {
+                  setChatSessions(prev => prev.filter(session => session.id !== id));
+                  return;
+                }
                 try {
                   await deleteDoc(doc(db, 'chat_sessions', id));
                 } catch (error) {
@@ -506,6 +560,10 @@ export default function App() {
               onBackToDashboard={() => setActiveView('dashboard')}
               onReview={async (card, rating) => {
                 const updatedCard = schedule(card, rating);
+                if (isUsingDevAuthBypass || !user) {
+                  setFlashcards(prev => prev.map(item => item.id === card.id ? updatedCard : item));
+                  return;
+                }
                 try {
                   await setDoc(doc(db, 'flashcards', card.id), updatedCard);
                 } catch (error) {
