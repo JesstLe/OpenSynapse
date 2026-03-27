@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Tag, Calendar, Code, Trash2, ExternalLink, ChevronRight, BookOpen, Sparkles, LayoutDashboard, BrainCircuit, Loader2 } from 'lucide-react';
+import { Search, Tag, Calendar, Code, Trash2, ExternalLink, ChevronRight, BookOpen, Sparkles, LayoutDashboard, BrainCircuit, Loader2, Filter, X, ChevronDown, ChevronUp, Edit3, Save } from 'lucide-react';
 import { Note } from '../types';
 import { cn } from '../lib/utils';
 import { cosineSimilarity } from '../lib/math';
@@ -10,16 +10,26 @@ interface NotesViewProps {
   key?: string;
   notes: Note[];
   onDelete: (id: string) => Promise<void>;
+  onUpdateNote?: (note: Note) => Promise<void>;
   initialSelectedId?: string | null;
   onBackToDashboard?: () => void;
+  editMode?: boolean;
+  onEditComplete?: () => void;
 }
 
-export default function NotesView({ notes, onDelete, initialSelectedId, onBackToDashboard }: NotesViewProps) {
+export default function NotesView({ notes, onDelete, onUpdateNote, initialSelectedId, onBackToDashboard, editMode = false, onEditComplete }: NotesViewProps) {
   const [search, setSearch] = useState('');
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [isSemantic, setIsSemantic] = useState(false);
   const [semanticResults, setSemanticResults] = useState<{ note: Note, similarity: number }[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [searchContent, setSearchContent] = useState(false);
+  const [isAdvancedFilterOpen, setIsAdvancedFilterOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Note>>({});
 
   const handleSearch = async () => {
     if (!isSemantic || !search.trim()) return;
@@ -63,14 +73,53 @@ export default function NotesView({ notes, onDelete, initialSelectedId, onBackTo
         setSelectedNote(note);
         // Clear search if the selected note is not in the filtered list
         setSearch('');
+        // If editMode is true, enter edit mode automatically
+        if (editMode) {
+          setIsEditing(true);
+          setEditForm({
+            title: note.title,
+            summary: note.summary,
+            content: note.content,
+            tags: [...note.tags]
+          });
+        }
       }
     }
-  }, [initialSelectedId, notes]);
+  }, [initialSelectedId, notes, editMode]);
 
-  const filteredNotes = notes.filter(n => 
-    n.title.toLowerCase().includes(search.toLowerCase()) ||
-    n.tags.some(t => t.toLowerCase().includes(search.toLowerCase()))
-  );
+  const allTags = React.useMemo(() => {
+    const tags = new Set<string>();
+    notes.forEach(note => note.tags.forEach(tag => tags.add(tag)));
+    return Array.from(tags).sort();
+  }, [notes]);
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const filteredNotes = React.useMemo(() => {
+    return notes.filter(n => {
+      const searchLower = search.toLowerCase();
+      const matchesTextSearch =
+        n.title.toLowerCase().includes(searchLower) ||
+        n.tags.some(t => t.toLowerCase().includes(searchLower)) ||
+        (searchContent && n.content.toLowerCase().includes(searchLower));
+
+      const matchesDateRange = (() => {
+        if (!startDate && !endDate) return true;
+        const noteDate = new Date(n.createdAt);
+        return (!startDate || noteDate >= new Date(startDate)) &&
+               (!endDate || noteDate <= new Date(endDate));
+      })();
+
+      const matchesTags = selectedTags.length === 0 ||
+                          n.tags.some(tag => selectedTags.includes(tag));
+
+      return matchesTextSearch && matchesDateRange && matchesTags;
+    });
+  }, [notes, search, startDate, endDate, selectedTags, searchContent]);
 
   const deleteNote = async (id: string) => {
     if (confirm("你确定要删除这个知识资产吗？")) {
@@ -120,6 +169,123 @@ export default function NotesView({ notes, onDelete, initialSelectedId, onBackTo
               <span className="text-[8px] uppercase tracking-widest font-bold text-orange-500/50">语义模式已开启</span>
             </div>
           )}
+
+          {/* Tag Filter */}
+          {allTags.length > 0 && (
+            <div className="mt-3">
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {allTags.map(tag => (
+                  <button
+                    key={tag}
+                    onClick={() => toggleTag(tag)}
+                    className={cn(
+                      "px-2 py-1 rounded-full text-[9px] font-medium whitespace-nowrap transition-all",
+                      selectedTags.includes(tag)
+                        ? "bg-orange-500 text-white border border-orange-500"
+                        : "bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 hover:text-white"
+                    )}
+                  >
+                    #{tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Advanced Filter Toggle */}
+          <button
+            onClick={() => setIsAdvancedFilterOpen(!isAdvancedFilterOpen)}
+            className="mt-3 w-full flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Filter size={14} className="text-orange-500/70" />
+              <span className="text-[10px] font-medium text-white/70">高级过滤</span>
+            </div>
+            {isAdvancedFilterOpen ? (
+              <ChevronUp size={14} className="text-white/40" />
+            ) : (
+              <ChevronDown size={14} className="text-white/40" />
+            )}
+          </button>
+
+          {/* Advanced Filter Panel */}
+          <AnimatePresence>
+            {isAdvancedFilterOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-2 p-3 rounded-xl bg-white/5 border border-white/10 space-y-3">
+                  {/* Date Range */}
+                  <div>
+                    <label className="flex items-center gap-2 text-[10px] font-medium text-white/60 mb-2">
+                      <Calendar size={12} className="text-orange-500/70" />
+                      日期范围
+                    </label>
+                    <div className="flex gap-2">
+                      <div className="flex-1 relative">
+                        <input
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white/70 focus:outline-none focus:border-orange-500/50 transition-all"
+                        />
+                      </div>
+                      <span className="text-white/20 text-[10px] py-1.5">-</span>
+                      <div className="flex-1 relative">
+                        <input
+                          type="date"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white/70 focus:outline-none focus:border-orange-500/50 transition-all"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Search Content Toggle */}
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-[10px] font-medium text-white/60">
+                      <Search size={12} className="text-orange-500/70" />
+                      搜索包含正文内容
+                    </label>
+                    <button
+                      onClick={() => setSearchContent(!searchContent)}
+                      className={cn(
+                        "w-10 h-5 rounded-full p-0.5 transition-all relative",
+                        searchContent ? "bg-orange-500" : "bg-white/10"
+                      )}
+                    >
+                      <motion.div
+                        className="w-4 h-4 rounded-full bg-white"
+                        animate={{ x: searchContent ? 20 : 0 }}
+                        transition={{ duration: 0.2 }}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Clear Filters */}
+                  {(startDate || endDate || selectedTags.length > 0 || searchContent) && (
+                    <button
+                      onClick={() => {
+                        setStartDate('');
+                        setEndDate('');
+                        setSelectedTags([]);
+                        setSearchContent(false);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-[10px] font-medium text-red-400"
+                    >
+                      <X size={12} />
+                      清除所有过滤条件
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -226,12 +392,28 @@ export default function NotesView({ notes, onDelete, initialSelectedId, onBackTo
                     </div>
                   </div>
                 </div>
-                <button 
-                  onClick={() => deleteNote(selectedNote.id)}
-                  className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
-                >
-                  <Trash2 size={20} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => {
+                      setIsEditing(true);
+                      setEditForm({
+                        title: selectedNote.title,
+                        summary: selectedNote.summary,
+                        content: selectedNote.content,
+                        tags: [...selectedNote.tags]
+                      });
+                    }}
+                    className="p-3 rounded-xl bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 transition-all"
+                  >
+                    <Edit3 size={20} />
+                  </button>
+                  <button 
+                    onClick={() => deleteNote(selectedNote.id)}
+                    className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-12">

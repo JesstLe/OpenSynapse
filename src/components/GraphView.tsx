@@ -1,21 +1,49 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import { Note, Flashcard } from '../types';
-import { Network, X, ExternalLink, Brain, Search, Maximize, AlertCircle } from 'lucide-react';
+import { Network, X, ExternalLink, Brain, Search, Maximize, AlertCircle, Edit3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+const MAX_NODES = 100;
+const MAX_TICKS = 300;
+
+const simulationConfig = {
+  alphaDecay: 0.02,
+  velocityDecay: 0.3,
+  forces: {
+    charge: -300,
+    linkDistance: 100,
+    collision: 40
+  }
+};
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 interface GraphViewProps {
   key?: string;
   notes: Note[];
   flashcards: Flashcard[];
   onNodeClick?: (id: string) => void;
+  onNodeEdit?: (id: string) => void;
 }
 
-export default function GraphView({ notes, flashcards, onNodeClick }: GraphViewProps) {
+export default function GraphView({ notes, flashcards, onNodeClick, onNodeEdit }: GraphViewProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const tickCountRef = useRef(0);
+  const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!svgRef.current || notes.length === 0) return;
@@ -256,13 +284,22 @@ export default function GraphView({ notes, flashcards, onNodeClick }: GraphViewP
               </div>
             </div>
 
-            <button
-              onClick={() => onNodeClick?.(selectedNote.id)}
-              className="mt-8 w-full py-4 bg-orange-500 hover:bg-orange-600 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all group"
-            >
-              查看完整笔记
-              <ExternalLink size={16} className="transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
-            </button>
+            <div className="flex gap-2 mt-8">
+              <button
+                onClick={() => onNodeEdit?.(selectedNote.id)}
+                className="flex-1 py-4 border-2 border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all group"
+              >
+                <Edit3 size={16} className="transition-transform group-hover:scale-110" />
+                编辑笔记
+              </button>
+              <button
+                onClick={() => onNodeClick?.(selectedNote.id)}
+                className="flex-1 py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all group"
+              >
+                查看笔记
+                <ExternalLink size={16} className="transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

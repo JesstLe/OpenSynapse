@@ -111,6 +111,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [breakthroughConfig, setBreakthroughConfig] = useState<BreakthroughConfig | null>(null);
+  const [noteEditMode, setNoteEditMode] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -293,8 +294,18 @@ export default function App() {
     }
   };
 
-  const navigateToNote = (id: string) => {
+  const handleUpdateNote = async (updatedNote: Note) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'notes', updatedNote.id), updatedNote);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `notes/${updatedNote.id}`);
+    }
+  };
+
+  const navigateToNote = (id: string, editMode = false) => {
     setSelectedNoteId(id);
+    setNoteEditMode(editMode);
     setActiveView('notes');
   };
 
@@ -470,6 +481,7 @@ export default function App() {
               notes={notes} 
               flashcards={flashcards}
               onNodeClick={navigateToNote}
+              onNodeEdit={(id) => navigateToNote(id, true)}
             />
           )}
           {activeView === 'review' && (
@@ -489,12 +501,15 @@ export default function App() {
             />
           )}
           {activeView === 'notes' && (
-            <NotesView 
-              key="notes" 
-              notes={notes} 
+            <NotesView
+              key="notes"
+              notes={notes}
               onDelete={handleDeleteNote}
+              onUpdateNote={handleUpdateNote}
               initialSelectedId={selectedNoteId}
               onBackToDashboard={() => setActiveView('dashboard')}
+              editMode={noteEditMode}
+              onEditComplete={() => setNoteEditMode(false)}
             />
           )}
         </AnimatePresence>
