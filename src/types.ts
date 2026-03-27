@@ -28,6 +28,7 @@ export interface Flashcard {
 export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
+  thought?: string; // 模型思考过程（可折叠显示）
   image?: string; // base64 string
 }
 

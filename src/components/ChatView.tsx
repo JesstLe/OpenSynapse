@@ -2,9 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Send, Sparkles, Loader2, BrainCircuit, Image as ImageIcon, X, LayoutDashboard, History, Plus, Trash2, MessageSquare, FileText, FileUp, Link as LinkIcon, ChevronRight, BookOpen } from 'lucide-react';
+import { Send, Sparkles, Loader2, BrainCircuit, Image as ImageIcon, X, LayoutDashboard, History, Plus, Trash2, MessageSquare, FileText, FileUp, Link as LinkIcon, ChevronRight, BookOpen, Square, RefreshCw } from 'lucide-react';
 import { ChatMessage, Note, Flashcard, ChatSession } from '../types';
-import { chatWithAI, processConversation, BreakthroughConfig, startBreakthroughChat, deconstructDocument, deconstructUrl, deconstructScannedDocument, deconstructTOC } from '../services/gemini';
+import { chatWithAI, chatWithAIStream, processConversation, BreakthroughConfig, startBreakthroughChat, startBreakthroughChatStream, deconstructDocument, deconstructUrl, deconstructScannedDocument, deconstructTOC, type StreamChunk } from '../services/gemini';
 import { cn } from '../lib/utils';
 import { AI_MODEL_OPTIONS, getModelOption, getPreferredTextModel, isKnownTextModel, setPreferredTextModel } from '../lib/aiModels';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -73,6 +73,8 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
   const [pdfAnalysis, setPdfAnalysis] = useState<{ chapters: any[], pageCount: number } | null>(null);
   const [showPdfOptions, setShowPdfOptions] = useState(false);
   const [customRange, setCustomRange] = useState({ start: 1, end: 20 });
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [showThinking, setShowThinking] = useState(true);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
@@ -103,19 +105,42 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
   const handleStartBreakthrough = async () => {
     if (!breakthroughConfig) return;
     setIsLoading(true);
+    const controller = new AbortController();
+    setAbortController(controller);
     setMessages([{ role: 'user', text: `开始针对 [${breakthroughConfig.tag}] 的专项攻坚。` }]);
     try {
-      const response = await startBreakthroughChat(breakthroughConfig, notes);
-      setMessages([
-        { role: 'user', text: `开始针对 [${breakthroughConfig.tag}] 的专项攻坚。` },
-        { role: 'model', text: response }
-      ]);
+      setMessages(prev => [...prev, { role: 'model', text: '', thought: '' }]);
+      
+      let fullText = '';
+      let fullThought = '';
+      const stream = startBreakthroughChatStream(breakthroughConfig, notes, controller.signal);
+      
+      for await (const chunk of stream) {
+        if (chunk.thought) fullThought += chunk.thought;
+        if (chunk.text) fullText += chunk.text;
+        setMessages(prev => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last.role === 'model') {
+            updated[updated.length - 1] = { ...last, text: fullText, thought: fullThought };
+          }
+          return updated;
+        });
+      }
       onClearBreakthrough?.();
-    } catch (error) {
+    } catch (error: any) {
+      if (controller.signal.aborted) return;
       console.error("Breakthrough failed:", error);
-      setMessages(prev => [...prev, { role: 'model', text: "抱歉，启动攻坚计划时遇到了错误。" }]);
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last.role === 'model' && !last.text) {
+          return prev.slice(0, -1).concat({ role: 'model', text: "抱歉，启动攻坚计划时遇到了错误。" });
+        }
+        return prev;
+      });
     } finally {
       setIsLoading(false);
+      setAbortController(null);
     }
   };
 
@@ -271,46 +296,89 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
     }
   };
 
-  const handleSend = async () => {
-    if ((!input.trim() && !selectedImage) || isLoading) return;
-
-    const userMsg: ChatMessage = selectedImage
-      ? { role: 'user', text: input, image: selectedImage }
-      : { role: 'user', text: input };
-    
-    const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
-    setInput('');
-    setSelectedImage(null);
+  // 通用的流式发送逻辑（handleSend 和 handleRegenerate 共用）
+  const handleSendWithMessages = async (messagesToSend: ChatMessage[]) => {
     setIsLoading(true);
+    const controller = new AbortController();
+    setAbortController(controller);
 
     try {
-      // If it's a breakthrough session, we might want to use a different prompt or handle it differently
-      // but for now, chatWithAI handles context and RAG which is good.
-      const response = await chatWithAI(newMessages, notes);
-      const finalMessages: ChatMessage[] = [...newMessages, { role: 'model', text: response }];
-      setMessages(finalMessages);
-      
-      // Save/Update session
+      setMessages(prev => [...prev, { role: 'model', text: '', thought: '' }]);
+
+      let fullText = '';
+      let fullThought = '';
+      const stream = chatWithAIStream(messagesToSend, notes, controller.signal);
+
+      for await (const chunk of stream) {
+        if (chunk.thought) fullThought += chunk.thought;
+        if (chunk.text) fullText += chunk.text;
+        setMessages(prev => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last.role === 'model') {
+            updated[updated.length - 1] = { ...last, text: fullText, thought: fullThought };
+          }
+          return updated;
+        });
+      }
+
+      // 保存会话（thought 不持久化到 Firestore，节省空间）
+      const finalMessages: ChatMessage[] = [...messagesToSend, { role: 'model', text: fullText }];
       const sessionId = currentSessionId || crypto.randomUUID();
       if (!currentSessionId) setCurrentSessionId(sessionId);
-      
       const title = finalMessages.find(m => m.role === 'user')?.text.slice(0, 30) || '新会话';
-      
       await onSaveSession({
         id: sessionId,
         title,
         messages: finalMessages,
         updatedAt: Date.now(),
-        userId: '' // Will be set by App.tsx
+        userId: '',
       });
-
-    } catch (error) {
+    } catch (error: any) {
+      if (controller.signal.aborted) return; // 用户主动停止，不显示错误
       console.error("Chat error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: getUserFacingAiError(error) }]);
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last.role === 'model' && !last.text) {
+          return prev.slice(0, -1).concat({ role: 'model', text: getUserFacingAiError(error) });
+        }
+        return prev;
+      });
     } finally {
       setIsLoading(false);
+      setAbortController(null);
     }
+  };
+
+  const handleSend = async () => {
+    if ((!input.trim() && !selectedImage) || isLoading) return;
+    const userMsg: ChatMessage = selectedImage
+      ? { role: 'user', text: input, image: selectedImage }
+      : { role: 'user', text: input };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setInput('');
+    setSelectedImage(null);
+    await handleSendWithMessages(newMessages);
+  };
+
+  // 停止生成
+  const handleStop = () => {
+    abortController?.abort();
+    setAbortController(null);
+    setIsLoading(false);
+  };
+
+  // 重新生成最后一条 AI 回复
+  const handleRegenerate = async () => {
+    let lastUserIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') { lastUserIdx = i; break; }
+    }
+    if (lastUserIdx === -1) return;
+    const truncated = messages.slice(0, lastUserIdx + 1);
+    setMessages(truncated);
+    await handleSendWithMessages(truncated);
   };
 
   const handleProcess = async () => {
@@ -557,6 +625,13 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               msg.role === 'user' ? "ml-auto items-end" : "items-start"
             )}
           >
+            {/* 思考过程折叠展示 */}
+            {msg.role === 'model' && msg.thought && showThinking && (
+              <details className="mb-1 w-full text-xs text-white/30 bg-white/5 border border-white/5 rounded-xl p-2 max-h-48 overflow-y-auto">
+                <summary className="cursor-pointer font-bold select-none">💭 思考过程</summary>
+                <div className="mt-2 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-white/25">{msg.thought}</div>
+              </details>
+            )}
             <div className={cn(
               "px-4 py-3 rounded-2xl text-sm leading-relaxed",
               msg.role === 'user' 
@@ -570,19 +645,31 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               )}
               <div className="markdown-body">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {msg.text}
+                  {msg.text || (isLoading && i === messages.length - 1 ? '' : '')}
                 </ReactMarkdown>
               </div>
             </div>
-            <span className="text-[10px] mt-1 text-white/20 uppercase tracking-widest font-bold">
-              {msg.role === 'user' ? '你' : '导师'}
-            </span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold">
+                {msg.role === 'user' ? '你' : '导师'}
+              </span>
+              {/* 重新生成按钮：只在最后一条 AI 消息 + 非 loading 状态显示 */}
+              {msg.role === 'model' && i === messages.length - 1 && !isLoading && msg.text && (
+                <button
+                  onClick={handleRegenerate}
+                  className="flex items-center gap-1 text-[10px] text-white/20 hover:text-orange-500 transition-colors uppercase tracking-widest font-bold"
+                  title="重新生成"
+                >
+                  <RefreshCw size={12} /> 重新生成
+                </button>
+              )}
+            </div>
           </motion.div>
         ))}
-        {isLoading && (
+        {isLoading && messages[messages.length - 1]?.role === 'model' && !messages[messages.length - 1]?.text && (
           <div className="flex items-center gap-2 text-white/40 text-xs font-medium animate-pulse">
             <BrainCircuit className="w-4 h-4" />
-            导师正在思考...
+            {messages[messages.length - 1]?.thought ? '正在生成回复...' : '导师正在思考...'}
           </div>
         )}
       </div>
@@ -827,18 +914,28 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
             placeholder="询问概念、算法或代码..."
             className="w-full bg-[#1A1A1A] border border-white/10 rounded-2xl pl-40 pr-16 py-4 text-sm focus:outline-none focus:border-orange-500/50 transition-all resize-none h-16 group-hover:border-white/20"
           />
-          <button
-            onClick={handleSend}
-            disabled={(!input.trim() && !selectedImage) || isLoading}
-            className={cn(
-              "absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl flex items-center justify-center transition-all",
-              (!input.trim() && !selectedImage) || isLoading
-                ? "text-white/20"
-                : "bg-orange-500 text-white hover:bg-orange-600 shadow-lg"
-            )}
-          >
-            <Send size={18} />
-          </button>
+          {isLoading ? (
+            <button
+              onClick={handleStop}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all"
+              title="停止生成"
+            >
+              <Square size={18} />
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() && !selectedImage}
+              className={cn(
+                "absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl flex items-center justify-center transition-all",
+                !input.trim() && !selectedImage
+                  ? "text-white/20"
+                  : "bg-orange-500 text-white hover:bg-orange-600 shadow-lg"
+              )}
+            >
+              <Send size={18} />
+            </button>
+          )}
         </div>
         <p className="text-[10px] text-center mt-3 text-white/20 uppercase tracking-widest font-medium">
           按 Enter 发送 • Shift+Enter 换行

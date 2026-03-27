@@ -1,7 +1,7 @@
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
-import { generateContentWithCodeAssist } from '../lib/codeAssist.js';
+import { generateContentWithCodeAssist, generateContentStreamWithCodeAssist } from '../lib/codeAssist.js';
 import {
   isCredentialsCompatible,
   loadCredentials,
@@ -20,6 +20,8 @@ if (apiKey && apiKey !== 'AIzaSy...') {
 } else {
   console.log('[Server] No valid GEMINI_API_KEY found. AI routes will prefer Code Assist OAuth.');
 }
+
+// ─── 非流式路由（用于 JSON 结构化输出等场景） ───
 
 async function generateContent(params: any): Promise<{ text: string }> {
   if (apiKeyClient) {
@@ -48,13 +50,65 @@ router.post('/generateContent', async (req, res) => {
   } catch (error: any) {
     console.error('[AI] Generate Content Error:', error);
     const message = error.message || 'Error generating content';
-    const status =
-      message.includes('429 ') || message.includes('RATE_LIMIT_EXCEEDED') || message.includes('MODEL_CAPACITY_EXHAUSTED')
-        ? 429
-        : 500;
-    res.status(status).json({ error: message });
+
+    let status = 500;
+    if (message.includes('429') || message.includes('RESOURCE_EXHAUSTED') || message.includes('MODEL_CAPACITY_EXHAUSTED')) {
+      status = 429;
+    } else if (message.includes('401') || message.includes('403') || message.includes('auth')) {
+      status = 401;
+    }
+
+    res.status(status).json({ error: message, isCapacityError: status === 429 });
   }
 });
+
+// ─── 流式路由（SSE 格式，传递 text/thought/error 结构化 chunk） ───
+
+router.post('/generateContentStream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // 防止反向代理缓冲 SSE
+
+  try {
+    if (apiKeyClient) {
+      // API Key 路径：使用官方 SDK 的流式接口
+      const result = await apiKeyClient.models.generateContentStream(req.body);
+      for await (const chunk of result) {
+        const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+        for (const part of parts) {
+          if ((part as any).thought && part.text) {
+            res.write(`data: ${JSON.stringify({ thought: part.text })}\n\n`);
+          } else if (part.text) {
+            res.write(`data: ${JSON.stringify({ text: part.text })}\n\n`);
+          }
+        }
+      }
+    } else {
+      // Code Assist OAuth 路径：使用自研流式接口
+      const credentials = await loadCredentials();
+      const clientConfig = resolveOAuthClientConfig();
+      if (!credentials || !isCredentialsCompatible(credentials, clientConfig.clientId)) {
+        throw new Error('凭证无效');
+      }
+
+      const stream = generateContentStreamWithCodeAssist(req.body, clientConfig);
+      for await (const chunk of stream) {
+        // chunk 已经是 { text?, thought? } 结构
+        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      }
+    }
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (error: any) {
+    console.error('[AI] Stream Error:', error);
+    // 在 SSE 流中传递错误事件
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    res.end();
+  }
+});
+
+// ─── Embedding 路由 ───
 
 router.post('/embedContent', async (req, res) => {
   if (!apiKeyClient) {
