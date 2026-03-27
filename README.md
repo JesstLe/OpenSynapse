@@ -254,67 +254,406 @@ User Input → Component → Service → API → External Service
 
 ## 🛠️ 软件工程实践
 
-### 代码质量
+### 1. 开发工作流
 
-- **TypeScript 严格模式** - 启用 `strict: true` 和 `noImplicitAny`
-- **ESLint + Prettier** - 统一的代码风格和格式化
-- **类型安全** - 全面类型定义，禁止 `any` 类型
-- **不可变更新** - 使用 spread 运算符进行状态更新
-
-### 错误处理
-
-```typescript
-// 统一的错误处理模式
-try {
-  const result = await riskyOperation()
-  return { success: true, data: result }
-} catch (error) {
-  console.error('Operation failed:', error)
-  return { 
-    success: false, 
-    error: error instanceof Error ? error.message : 'Unknown error' 
-  }
-}
+```mermaid
+flowchart LR
+    A[需求分析] --> B[任务拆解]
+    B --> C[技术方案]
+    C --> D[编码实现]
+    D --> E[自测验证]
+    E --> F[Code Review]
+    F -->|通过| G[合并部署]
+    F -->|不通过| D
+    G --> H[集成测试]
+    H --> I[发布上线]
+    
+    style A fill:#e1f5fe
+    style G fill:#c8e6c9
+    style I fill:#fff9c4
 ```
 
-### 测试策略
+### 2. 系统架构详解
 
-- **单元测试** - Jest + React Testing Library
-- **E2E 测试** - Playwright 覆盖关键用户流程
-- **类型检查** - `tsc --noEmit` 作为 CI 前置检查
+```mermaid
+flowchart TB
+    subgraph Client["🖥️ 客户端"]
+        UI["UI Components<br/>React 19 + Tailwind"]
+        State["状态管理<br/>React Hooks"]
+        Cache["本地缓存<br/>LocalStorage"]
+    end
+    
+    subgraph Server["⚙️ 服务端"]
+        Vite["Vite Dev Server"]
+        API["Express API"]
+        Auth["认证中间件"]
+    end
+    
+    subgraph Services["☁️ 外部服务"]
+        FB["Firebase<br/>Auth + Firestore"]
+        Gemini["Gemini API"]
+        OAuth["Google OAuth"]
+    end
+    
+    UI <--> State
+    State <--> Cache
+    UI <-->|HTTP| Vite
+    Vite --> API
+    API --> Auth
+    Auth --> FB
+    API --> Gemini
+    Auth --> OAuth
+    
+    style Client fill:#e3f2fd
+    style Server fill:#f3e5f5
+    style Services fill:#e8f5e9
+```
 
-### 性能优化
+### 3. 认证流程（OAuth 2.0 + PKCE）
 
-- **虚拟滚动** - 大量笔记列表使用虚拟化渲染
-- **防抖节流** - 搜索输入和图谱交互的防抖处理
-- **代码分割** - 路由级懒加载减少首屏时间
-- **缓存策略** - Firestore 离线缓存 + 内存缓存
+```mermaid
+sequenceDiagram
+    actor U as 用户
+    participant CLI as CLI/Web
+    participant OAuth as OAuth Server
+    participant CB as 回调服务器<br/>localhost:3088
+    participant FS as File System
+    
+    U->>CLI: auth login
+    CLI->>CLI: 生成 PKCE<br/>code_verifier + code_challenge
+    CLI->>OAuth: 授权请求<br/>+ code_challenge
+    OAuth->>U: 浏览器打开<br/>授权页面
+    U->>OAuth: 登录并授权
+    OAuth->>CB: 重定向<br/>+ authorization_code
+    CB->>CLI: 获取 code
+    CLI->>OAuth: 请求 Token<br/>+ code + code_verifier
+    OAuth->>CLI: 返回<br/>access_token + refresh_token
+    CLI->>FS: 保存凭证到<br/>~/.opensynapse/
+    CLI->>U: 登录成功
+```
 
-### 安全实践
+### 4. 数据流图
 
-- **OAuth 2.0 + PKCE** - 安全的认证流程
-- **Firestore 规则** - 细粒度的数据访问控制
-- **环境变量** - 敏感信息不提交到版本控制
-- **输入验证** - 所有用户输入经过验证和消毒
+```mermaid
+flowchart TB
+    subgraph Input["📥 输入层"]
+        Text["文本输入"]
+        Image["图片上传"]
+        PDF["PDF 解析"]
+        URL["URL 抓取"]
+    end
+    
+    subgraph Process["🔄 处理层"]
+        Preprocess["预处理"]
+        AI["AI 分析<br/>Gemini"]
+        Extract["信息提取"]
+    end
+    
+    subgraph Storage["💾 存储层"]
+        Note["笔记存储"]
+        Card["闪卡生成"]
+        Graph["图谱节点"]
+    end
+    
+    subgraph Output["📤 输出层"]
+        Review["复习提醒"]
+        Visual["可视化展示"]
+        Sync["云端同步"]
+    end
+    
+    Text --> Preprocess
+    Image --> Preprocess
+    PDF --> Preprocess
+    URL --> Preprocess
+    Preprocess --> AI
+    AI --> Extract
+    Extract --> Note
+    Extract --> Card
+    Extract --> Graph
+    Note --> Visual
+    Card --> Review
+    Graph --> Visual
+    Note --> Sync
+    Card --> Sync
+    
+    style Process fill:#fff3e0
+    style Storage fill:#e8f5e9
+```
 
-### 持续集成
+### 5. CI/CD 流水线
 
-```yaml
-# .github/workflows/ci.yml 示例
-name: CI
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run test
-      - run: npm run build
+```mermaid
+flowchart LR
+    A[代码提交] --> B{类型检查}
+    B -->|通过| C[单元测试]
+    B -->|失败| X[终止]
+    C -->|通过| D[构建检查]
+    C -->|失败| X
+    D -->|通过| E[安全检查]
+    D -->|失败| X
+    E -->|通过| F[合并到 main]
+    E -->|失败| X
+    F --> G[自动部署<br/>Staging]
+    G --> H[E2E 测试]
+    H -->|通过| I[生产部署]
+    H -->|失败| J[回滚]
+    
+    style A fill:#e3f2fd
+    style X fill:#ffcdd2
+    style I fill:#c8e6c9
+    style J fill:#ffccbc
+```
+
+### 6. Git 分支策略（Git Flow）
+
+```mermaid
+flowchart TD
+    M[main<br/>生产分支] 
+    D[develop<br/>开发分支]
+    F1[feature/auth<br/>功能分支]
+    F2[feature/ui<br/>功能分支]
+    R[release/v1.0<br/>发布分支]
+    H[hotfix<br/>热修复]
+    
+    M -->|创建| D
+    D -->|从 develop<br/>创建| F1
+    D -->|从 develop<br/>创建| F2
+    F1 -->|PR 合并| D
+    F2 -->|PR 合并| D
+    D -->|创建| R
+    R -->|合并| M
+    R -->|合并| D
+    M -->|创建| H
+    H -->|合并| M
+    H -->|合并| D
+    
+    style M fill:#c8e6c9
+    style D fill:#fff9c4
+    style R fill:#ffccbc
+    style H fill:#ffcdd2
+```
+
+### 7. 代码审查流程
+
+```mermaid
+flowchart TD
+    A[开发者<br/>提交 PR] --> B[自动化检查]
+    B --> C{类型检查}
+    C -->|通过| D[测试覆盖]
+    C -->|失败| E[修复问题]
+    D -->|通过| F[静态分析]
+    D -->|失败| E
+    F -->|通过| G[人工审查]
+    F -->|失败| E
+    G -->|需要修改| H[代码更新]
+    H --> G
+    G -->|批准| I[合并代码]
+    E --> A
+    
+    style A fill:#e3f2fd
+    style I fill:#c8e6c9
+    style E fill:#ffcdd2
+```
+
+### 8. 测试金字塔
+
+```mermaid
+flowchart TD
+    subgraph Tests["测试策略"]
+        direction TB
+        E2E["🎯 E2E 测试<br/>Playwright<br/>5%"]
+        INT["⚙️ 集成测试<br/>API 测试<br/>20%"]
+        UNIT["🧪 单元测试<br/>Jest<br/>75%"]
+    end
+    
+    subgraph Metrics["质量指标"]
+        COV["📊 覆盖率 > 80%"]
+        MUT["🧬 变异测试"]
+        PERF["⚡ 性能基准"]
+    end
+    
+    UNIT --> INT
+    INT --> E2E
+    Tests --> Metrics
+    
+    style E2E fill:#fff9c4
+    style INT fill:#e1f5fe
+    style UNIT fill:#c8e6c9
+```
+
+### 9. 部署架构
+
+```mermaid
+flowchart TB
+    subgraph Dev["开发环境"]
+        DV["localhost:3000"]
+    end
+    
+    subgraph Staging["预发布环境"]
+        ST["staging.opensynapse.dev"]
+        ST_FB["Firebase Staging"]
+    end
+    
+    subgraph Prod["生产环境"]
+        CDN["CloudFlare CDN"]
+        WEB["Vercel/Firebase Hosting"]
+        API["Cloud Functions"]
+        DB["Firestore"]
+        AUTH["Firebase Auth"]
+    end
+    
+    DV -->|推送| ST
+    ST --> ST_FB
+    ST -->|通过测试| CDN
+    CDN --> WEB
+    WEB --> API
+    API --> DB
+    API --> AUTH
+    
+    style Dev fill:#e3f2fd
+    style Staging fill:#fff9c4
+    style Prod fill:#c8e6c9
+```
+
+### 10. 错误处理流程
+
+```mermaid
+flowchart TD
+    A[错误发生] --> B{错误类型}
+    
+    B -->|网络错误| C[重试机制<br/>指数退避]
+    B -->|认证错误| D[刷新 Token]
+    B -->|业务错误| E[用户提示]
+    B -->|系统错误| F[上报监控]
+    
+    C -->|成功| G[继续执行]
+    C -->|失败| H[降级处理]
+    D -->|成功| G
+    D -->|失败| I[重新登录]
+    
+    E --> J[记录日志]
+    F --> K[发送告警]
+    H --> L[缓存数据]
+    
+    style A fill:#ffcdd2
+    style G fill:#c8e6c9
+    style K fill:#ffccbc
+```
+
+### 11. 性能监控体系
+
+```mermaid
+flowchart LR
+    subgraph Metrics["📊 监控指标"]
+        FCP["FCP<br/>首屏渲染"]
+        LCP["LCP<br/>最大内容绘制"]
+        TTI["TTI<br/>可交互时间"]
+        CLS["CLS<br/>布局偏移"]
+    end
+    
+    subgraph Tools["🔧 监控工具"]
+        Vercel["Vercel Analytics"]
+        Firebase["Firebase Performance"]
+        Sentry["Sentry Error"]
+    end
+    
+    subgraph Alert["🚨 告警机制"]
+        Slack["Slack 通知"]
+        Email["邮件告警"]
+        Dashboard["监控大盘"]
+    end
+    
+    Metrics --> Tools
+    Tools --> Alert
+    
+    style Metrics fill:#e3f2fd
+    style Tools fill:#f3e5f5
+    style Alert fill:#ffccbc
+```
+
+### 12. 安全策略
+
+```mermaid
+flowchart TB
+    subgraph InputSec["输入安全"]
+        A[输入验证<br/>Zod Schema]
+        B[XSS 过滤]
+        C[SQL 注入防护]
+    end
+    
+    subgraph AuthSec["认证安全"]
+        D[OAuth 2.0 + PKCE]
+        E[JWT Token]
+        F[Refresh Rotation]
+    end
+    
+    subgraph DataSec["数据安全"]
+        G[Firestore 规则]
+        H[字段级权限]
+        I[数据加密]
+    end
+    
+    subgraph InfraSec["基础设施"]
+        J[HTTPS 强制]
+        K[CORS 配置]
+        L[Rate Limiting]
+    end
+    
+    A --> B --> C
+    D --> E --> F
+    G --> H --> I
+    J --> K --> L
+    
+    style InputSec fill:#e8f5e9
+    style AuthSec fill:#fff3e0
+    style DataSec fill:#e3f2fd
+    style InfraSec fill:#fce4ec
+```
+
+### 13. 设计模式应用
+
+| 模式 | 应用场景 | 实现位置 |
+|------|----------|----------|
+| **单例模式** | Firebase App 实例 | `src/firebase.ts` |
+| **工厂模式** | AI 模型实例创建 | `src/lib/aiModels.ts` |
+| **观察者模式** | Firestore 实时订阅 | `src/App.tsx` |
+| **策略模式** | 认证策略切换 | `src/lib/oauth.ts` |
+| **装饰器模式** | API 请求中间件 | `src/api/ai.ts` |
+
+### 14. 状态管理设计
+
+```mermaid
+flowchart TB
+    subgraph Local["🗂️ 本地状态"]
+        UI["UI State<br/>useState"]
+        Form["Form State<br/>useReducer"]
+        Cache["Query Cache<br/>SWR/React Query"]
+    end
+    
+    subgraph Global["☁️ 全局状态"]
+        Auth["Auth State<br/>Firebase Auth"]
+        Data["App Data<br/>Firestore"]
+        Sync["Sync State<br/>Optimistic UI"]
+    end
+    
+    subgraph Persist["💾 持久化"]
+        LocalS["LocalStorage<br/>用户设置"]
+        Indexed["IndexedDB<br/>离线数据"]
+        FB["Firestore<br/>云端同步"]
+    end
+    
+    UI --> Cache
+    Form --> Cache
+    Cache --> Sync
+    Sync --> FB
+    Auth --> FB
+    Data --> FB
+    Cache --> LocalS
+    Cache --> Indexed
+    
+    style Local fill:#e3f2fd
+    style Global fill:#f3e5f5
+    style Persist fill:#e8f5e9
 ```
 
 ---
