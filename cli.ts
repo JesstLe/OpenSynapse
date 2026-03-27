@@ -3,6 +3,8 @@ import path from 'path';
 import { GoogleGenAI, Type } from "@google/genai";
 import { GoogleAuth } from 'google-auth-library';
 import dotenv from 'dotenv';
+import { handleAuthCommand, getAccessToken } from './cli-auth.js';
+import { loadCredentials } from './src/lib/oauth.js';
 
 dotenv.config();
 
@@ -11,15 +13,34 @@ const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
 let ai: GoogleGenAI;
 
-if (!GEMINI_KEY || GEMINI_KEY === "AIzaSy..." || GEMINI_KEY.trim() === "") {
-  console.log("[CLI] GEMINI_API_KEY is not set or valid in .env. Falling back to GoogleAuth (ADC/OAuth).");
+/**
+ * 初始化 GoogleGenAI
+ * 优先级：1. OAuth凭证 2. API Key 3. GoogleAuth ADC
+ */
+async function initAI() {
+  // 1. 尝试使用OAuth凭证
+  const oauthCredentials = await loadCredentials();
+  if (oauthCredentials) {
+    console.log("[CLI] 使用OAuth凭证进行认证");
+    // @ts-ignore - Using OAuth access token directly
+    ai = new GoogleGenAI({ apiKey: oauthCredentials.access_token });
+    return;
+  }
+
+  // 2. 尝试使用API Key
+  if (GEMINI_KEY && GEMINI_KEY !== "AIzaSy..." && GEMINI_KEY.trim() !== "") {
+    console.log("[CLI] 使用API Key进行认证");
+    ai = new GoogleGenAI({ apiKey: GEMINI_KEY });
+    return;
+  }
+
+  // 3. 回退到GoogleAuth ADC
+  console.log("[CLI] 未找到OAuth凭证或API Key，尝试使用GoogleAuth ADC");
+  console.log("[CLI] 提示：运行 'npx tsx cli.ts auth login' 使用浏览器OAuth登录");
   const auth = new GoogleAuth({
     scopes: ['https://www.googleapis.com/auth/cloud-platform', 'https://www.googleapis.com/auth/generative-language']
   });
-  // @ts-ignore
   ai = new GoogleGenAI({ auth } as any);
-} else {
-  ai = new GoogleGenAI({ apiKey: GEMINI_KEY });
 }
 
 async function processFile(filePath: string) {
@@ -105,9 +126,59 @@ async function processFile(filePath: string) {
   }
 }
 
-const filePath = process.argv[2];
-if (!filePath) {
-  console.log("Usage: npx tsx cli.ts <path_to_exported_chat.txt>");
-} else {
-  processFile(path.resolve(filePath)).catch(console.error);
+/**
+ * 显示帮助信息
+ */
+function showHelp() {
+  console.log('OpenSynapse CLI\n');
+  console.log('用法:');
+  console.log('  npx tsx cli.ts <command> [options]\n');
+  console.log('命令:');
+  console.log('  auth     认证管理 (login/logout/status)');
+  console.log('  help     显示此帮助信息\n');
+  console.log('处理文件:');
+  console.log('  npx tsx cli.ts <path_to_file.txt>\n');
+  console.log('认证:');
+  console.log('  npx tsx cli.ts auth login   使用Google账号登录');
+  console.log('  npx tsx cli.ts auth status  查看登录状态');
+  console.log('  npx tsx cli.ts auth logout  退出登录\n');
 }
+
+/**
+ * 主函数
+ */
+async function main() {
+  const args = process.argv.slice(2);
+  const command = args[0];
+
+  // 处理 auth 命令
+  if (command === 'auth') {
+    await handleAuthCommand(args.slice(1));
+    return;
+  }
+
+  // 处理 help 命令
+  if (command === 'help' || command === '--help' || command === '-h') {
+    showHelp();
+    return;
+  }
+
+  // 没有参数或参数不是文件
+  if (!command || !fs.existsSync(path.resolve(command))) {
+    console.log('错误: 请提供有效的文件路径\n');
+    showHelp();
+    process.exit(1);
+  }
+
+  // 初始化AI（支持OAuth/API Key/ADC）
+  await initAI();
+
+  // 处理文件
+  await processFile(path.resolve(command));
+}
+
+// 运行主函数
+main().catch(err => {
+  console.error('[CLI] Error:', err);
+  process.exit(1);
+});
