@@ -2,7 +2,7 @@
 
 # OpenSynapse (突触)
 
-**AI 驱动的知识复利系统**
+**🧠 AI 驱动的知识复利系统 | 智能学习笔记 | 间隔重复 | 知识图谱**
 
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript)](https://www.typescriptlang.org/)
@@ -12,12 +12,17 @@
 
 <p align="center">
   <b>聊天 → 提炼 → 复习 → 连接</b><br/>
-  让知识积累成为复利增长
+  <span style="color: #666;">AI 对话学习 + 智能笔记 + FSRS 复习 + 知识图谱可视化</span><br/>
+  <span style="color: #666;">让知识积累成为复利增长</span>
 </p>
 
 [快速开始](#快速开始) • [功能特性](#功能特性) • [架构设计](#架构设计) • [贡献指南](#贡献指南) • [路线图](#路线图)
 
 </div>
+
+> 🎯 **OpenSynapse** 是一个开源的 AI 驱动知识管理系统，将 Gemini AI 对话、智能笔记提取、FSRS 间隔重复复习和 D3.js 知识图谱整合到一个工作流中。支持 Firebase 云端同步、多设备访问、OAuth 认证，以及 CLI 命令行工具。
+
+---
 
 ---
 

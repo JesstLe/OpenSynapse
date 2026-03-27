@@ -33,6 +33,7 @@ import GraphView from './components/GraphView';
 import ReviewView from './components/ReviewView';
 import NotesView from './components/NotesView';
 import DashboardView from './components/DashboardView';
+import SettingsView from './components/SettingsView';
 
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import { 
@@ -49,7 +50,7 @@ import {
   getDocFromServer
 } from 'firebase/firestore';
 
-type View = 'chat' | 'graph' | 'review' | 'notes' | 'dashboard';
+type View = 'chat' | 'graph' | 'review' | 'notes' | 'dashboard' | 'settings';
 
 enum OperationType {
   CREATE = 'create',
@@ -474,6 +475,13 @@ export default function App() {
             onClick={() => setActiveView('notes')} 
             isDarkMode={isDarkMode}
           />
+          <NavItem
+            icon={<Settings size={20} />}
+            label="设置"
+            active={activeView === 'settings'}
+            onClick={() => setActiveView('settings')}
+            isDarkMode={isDarkMode}
+          />
         </div>
 
         <div className="p-4 space-y-2 border-t border-border-main">
@@ -545,6 +553,12 @@ export default function App() {
           icon={<BookOpen size={20} />} 
           active={activeView === 'notes'} 
           onClick={() => setActiveView('notes')} 
+          isDarkMode={isDarkMode}
+        />
+        <MobileNavItem
+          icon={<Settings size={20} />}
+          active={activeView === 'settings'}
+          onClick={() => setActiveView('settings')}
           isDarkMode={isDarkMode}
         />
       </nav>
@@ -640,6 +654,12 @@ export default function App() {
               onBackToDashboard={() => setActiveView('dashboard')}
               editMode={noteEditMode}
               onEditComplete={() => setNoteEditMode(false)}
+            />
+          )}
+          {activeView === 'settings' && (
+            <SettingsView
+              key="settings"
+              onBackToChat={() => setActiveView('chat')}
             />
           )}
         </AnimatePresence>

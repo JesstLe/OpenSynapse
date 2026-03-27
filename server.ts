@@ -2,6 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs/promises";
+import dotenv from "dotenv";
 import { Note, Flashcard } from "./src/types";
 import aiRouter from './src/api/ai';
 
@@ -9,6 +10,16 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
   const DATA_FILE = path.join(process.cwd(), "data.json");
+  const ENV_FILE = path.join(process.cwd(), ".env.local");
+  const LOCAL_PROVIDER_ENV_VARS = [
+    'GEMINI_API_KEY',
+    'OPENAI_API_KEY',
+    'MINIMAX_API_KEY',
+    'ZHIPU_API_KEY',
+    'MOONSHOT_API_KEY',
+    'GOOGLE_CLOUD_PROJECT',
+    'GOOGLE_CLOUD_PROJECT_ID',
+  ] as const;
 
   app.use(express.json({ limit: '50mb' }));
 
@@ -25,6 +36,68 @@ async function startServer() {
   const saveData = async (data: any) => {
     await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
   };
+
+  const readEnvConfig = async () => {
+    try {
+      const raw = await fs.readFile(ENV_FILE, "utf-8");
+      return dotenv.parse(raw);
+    } catch {
+      return {};
+    }
+  };
+
+  const writeEnvConfig = async (nextConfig: Record<string, string>) => {
+    const lines = Object.entries(nextConfig)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => `${key}=${JSON.stringify(value)}`);
+    await fs.writeFile(ENV_FILE, `${lines.join("\n")}\n`);
+  };
+
+  app.get("/api/local-config/providers", async (_req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(404).json({ error: "Settings API unavailable in production." });
+    }
+
+    const config = await readEnvConfig();
+    const providers = LOCAL_PROVIDER_ENV_VARS.map((key) => ({
+      key,
+      configured: Boolean((process.env[key] || config[key] || "").trim()),
+      valuePreview: (process.env[key] || config[key] || "").trim()
+        ? `${(process.env[key] || config[key]).trim().slice(0, 4)}***`
+        : "",
+    }));
+
+    res.json({ providers });
+  });
+
+  app.post("/api/local-config/providers", async (req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(404).json({ error: "Settings API unavailable in production." });
+    }
+
+    const updates = req.body?.updates;
+    if (!updates || typeof updates !== "object" || Array.isArray(updates)) {
+      return res.status(400).json({ error: "Invalid updates payload." });
+    }
+
+    const current = await readEnvConfig();
+    for (const [key, value] of Object.entries(updates)) {
+      if (!LOCAL_PROVIDER_ENV_VARS.includes(key as (typeof LOCAL_PROVIDER_ENV_VARS)[number])) {
+        return res.status(400).json({ error: `Unsupported config key: ${key}` });
+      }
+
+      if (typeof value === "string" && value.trim()) {
+        current[key] = value.trim();
+        process.env[key] = value.trim();
+      } else {
+        delete current[key];
+        delete process.env[key];
+      }
+    }
+
+    await writeEnvConfig(current);
+    res.json({ success: true });
+  });
 
   // API Routes
   app.use('/api/ai', aiRouter);
