@@ -131,32 +131,32 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
   return (
     <div className="flex h-full">
       {/* List */}
-      <div className="w-full md:w-80 border-r border-white/5 flex flex-col bg-[#0A0A0A]">
-        <div className="p-6 border-b border-white/5">
+      <div className="w-full md:w-80 border-r border-border-main flex flex-col bg-sidebar">
+        <div className="p-6 border-b border-border-main">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold tracking-tight">知识库</h2>
+            <h2 className="text-xl font-bold tracking-tight text-text-main">知识库</h2>
             <button 
               onClick={onBackToDashboard}
-              className="p-2 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-tertiary text-text-muted hover:text-text-main transition-colors"
               title="返回仪表盘"
             >
               <LayoutDashboard size={18} />
             </button>
           </div>
           <div className="relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted opacity-40" />
             <input
               type="text"
               placeholder={isSemantic ? "语义搜索 (输入底层逻辑)..." : "搜索概念..."}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-12 py-2 text-xs focus:outline-none focus:border-orange-500/50 transition-all"
+              className="w-full bg-tertiary border border-border-main rounded-xl pl-10 pr-12 py-2 text-xs text-text-main placeholder:text-text-muted/50 focus:outline-none focus:border-accent/50 transition-all shadow-sm"
             />
             <button
               onClick={() => setIsSemantic(!isSemantic)}
               className={cn(
                 "absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all",
-                isSemantic ? "bg-orange-500 text-white" : "text-white/20 hover:bg-white/5"
+                isSemantic ? "bg-accent text-white" : "text-text-muted hover:bg-tertiary"
               )}
               title={isSemantic ? "切换为普通搜索" : "切换为语义搜索"}
             >
@@ -179,10 +179,10 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
                     key={tag}
                     onClick={() => toggleTag(tag)}
                     className={cn(
-                      "px-2 py-1 rounded-full text-[9px] font-medium whitespace-nowrap transition-all",
+                      "px-2 py-1 rounded-full text-[9px] font-medium whitespace-nowrap transition-all border",
                       selectedTags.includes(tag)
-                        ? "bg-orange-500 text-white border border-orange-500"
-                        : "bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 hover:text-white"
+                        ? "bg-accent text-white border-accent"
+                        : "bg-tertiary text-text-sub border-border-main hover:bg-secondary hover:text-text-main"
                     )}
                   >
                     #{tag}
@@ -195,16 +195,16 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
           {/* Advanced Filter Toggle */}
           <button
             onClick={() => setIsAdvancedFilterOpen(!isAdvancedFilterOpen)}
-            className="mt-3 w-full flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
+            className="mt-3 w-full flex items-center justify-between p-2 rounded-lg bg-tertiary border border-border-main hover:bg-secondary transition-all"
           >
             <div className="flex items-center gap-2">
-              <Filter size={14} className="text-orange-500/70" />
-              <span className="text-[10px] font-medium text-white/70">高级过滤</span>
+              <Filter size={14} className="text-accent/70" />
+              <span className="text-[10px] font-medium text-text-sub">高级过滤</span>
             </div>
             {isAdvancedFilterOpen ? (
-              <ChevronUp size={14} className="text-white/40" />
+              <ChevronUp size={14} className="text-text-muted" />
             ) : (
-              <ChevronDown size={14} className="text-white/40" />
+              <ChevronDown size={14} className="text-text-muted" />
             )}
           </button>
 
@@ -218,11 +218,11 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-                <div className="mt-2 p-3 rounded-xl bg-white/5 border border-white/10 space-y-3">
+                <div className="mt-2 p-3 rounded-xl bg-tertiary border border-border-main space-y-3">
                   {/* Date Range */}
                   <div>
-                    <label className="flex items-center gap-2 text-[10px] font-medium text-white/60 mb-2">
-                      <Calendar size={12} className="text-orange-500/70" />
+                    <label className="flex items-center gap-2 text-[10px] font-medium text-text-muted mb-2">
+                      <Calendar size={12} className="text-accent/70" />
                       日期范围
                     </label>
                     <div className="flex gap-2">
@@ -231,16 +231,16 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
                           type="date"
                           value={startDate}
                           onChange={(e) => setStartDate(e.target.value)}
-                          className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white/70 focus:outline-none focus:border-orange-500/50 transition-all"
+                          className="w-full bg-primary/50 border border-border-main rounded-lg px-2 py-1.5 text-[10px] text-text-main focus:outline-none focus:border-accent/50 transition-all"
                         />
                       </div>
-                      <span className="text-white/20 text-[10px] py-1.5">-</span>
+                      <span className="text-text-muted/30 text-[10px] py-1.5">-</span>
                       <div className="flex-1 relative">
                         <input
                           type="date"
                           value={endDate}
                           onChange={(e) => setEndDate(e.target.value)}
-                          className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white/70 focus:outline-none focus:border-orange-500/50 transition-all"
+                          className="w-full bg-primary/50 border border-border-main rounded-lg px-2 py-1.5 text-[10px] text-text-main focus:outline-none focus:border-accent/50 transition-all"
                         />
                       </div>
                     </div>
@@ -248,19 +248,19 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
 
                   {/* Search Content Toggle */}
                   <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 text-[10px] font-medium text-white/60">
-                      <Search size={12} className="text-orange-500/70" />
+                    <label className="flex items-center gap-2 text-[10px] font-medium text-text-sub">
+                      <Search size={12} className="text-accent/70" />
                       搜索包含正文内容
                     </label>
                     <button
                       onClick={() => setSearchContent(!searchContent)}
                       className={cn(
                         "w-10 h-5 rounded-full p-0.5 transition-all relative",
-                        searchContent ? "bg-orange-500" : "bg-white/10"
+                        searchContent ? "bg-accent" : "bg-primary-sub/20"
                       )}
                     >
                       <motion.div
-                        className="w-4 h-4 rounded-full bg-white"
+                        className="w-4 h-4 rounded-full bg-white shadow-sm"
                         animate={{ x: searchContent ? 20 : 0 }}
                         transition={{ duration: 0.2 }}
                       />
@@ -276,7 +276,7 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
                         setSelectedTags([]);
                         setSearchContent(false);
                       }}
-                      className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-[10px] font-medium text-red-400"
+                      className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-all text-[10px] font-medium text-red-500"
                     >
                       <X size={12} />
                       清除所有过滤条件
@@ -303,24 +303,24 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
                   key={note.id}
                   onClick={() => setSelectedNote(note)}
                   className={cn(
-                    "w-full text-left p-4 rounded-2xl transition-all group relative overflow-hidden",
+                    "w-full text-left p-4 rounded-2xl transition-all group relative overflow-hidden border",
                     selectedNote?.id === note.id 
-                      ? "bg-white/10 border border-white/10" 
-                      : "hover:bg-white/5 border border-transparent"
+                      ? "bg-accent/10 border-accent/20 text-accent shadow-sm" 
+                      : "hover:bg-tertiary border-transparent text-text-sub"
                   )}
                 >
-                  <div className="absolute top-0 right-0 px-2 py-0.5 bg-orange-500/10 text-orange-500 text-[8px] font-bold">
+                  <div className="absolute top-0 right-0 px-2 py-0.5 bg-accent/10 text-accent text-[8px] font-bold">
                     {Math.round(similarity * 100)}% 匹配
                   </div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-orange-500/70">
+                    <span className="text-[10px] font-bold uppercase tracking-widest opacity-60">
                       {new Date(note.createdAt).toLocaleDateString()}
                     </span>
                   </div>
                   <h3 className="font-bold text-sm mb-2 line-clamp-1">{note.title}</h3>
                   <div className="flex flex-wrap gap-1">
                     {note.tags.slice(0, 2).map(tag => (
-                      <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-white/40 border border-white/5">
+                      <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded bg-secondary text-text-muted border border-border-main">
                         #{tag}
                       </span>
                     ))}
@@ -334,14 +334,14 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
               key={note.id}
               onClick={() => setSelectedNote(note)}
               className={cn(
-                "w-full text-left p-4 rounded-2xl transition-all group relative overflow-hidden",
+                "w-full text-left p-4 rounded-2xl transition-all group relative overflow-hidden border",
                 selectedNote?.id === note.id 
-                  ? "bg-white/10 border border-white/10" 
-                  : "hover:bg-white/5 border border-transparent"
+                  ? "bg-accent/10 border-accent/20 text-accent shadow-sm" 
+                  : "hover:bg-tertiary border-transparent text-text-sub"
               )}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-orange-500/70">
+                <span className="text-[10px] font-bold uppercase tracking-widest opacity-60">
                   {new Date(note.createdAt).toLocaleDateString()}
                 </span>
                 <ChevronRight size={14} className={cn(
@@ -352,7 +352,7 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
               <h3 className="font-bold text-sm mb-2 line-clamp-1">{note.title}</h3>
               <div className="flex flex-wrap gap-1">
                 {note.tags.slice(0, 2).map(tag => (
-                  <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-white/40 border border-white/5">
+                  <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded bg-secondary text-text-muted border border-border-main">
                     #{tag}
                   </span>
                 ))}
@@ -363,7 +363,7 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
       </div>
 
       {/* Detail */}
-      <div className="flex-1 overflow-y-auto bg-[#0A0A0A]">
+      <div className="flex-1 overflow-y-auto bg-primary">
         <AnimatePresence mode="wait">
           {selectedNote ? (
             <motion.div
@@ -375,17 +375,17 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
             >
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-orange-500/20 flex items-center justify-center">
-                    <BookOpen className="w-6 h-6 text-orange-500" />
+                  <div className="w-12 h-12 rounded-2xl bg-accent/20 flex items-center justify-center shadow-inner">
+                    <BookOpen className="w-6 h-6 text-accent" />
                   </div>
                   <div>
-                    <h1 className="text-4xl font-bold tracking-tighter">{selectedNote.title}</h1>
+                    <h1 className="text-4xl font-bold tracking-tighter text-text-main">{selectedNote.title}</h1>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-white/40 flex items-center gap-1">
+                      <span className="text-xs text-text-muted flex items-center gap-1">
                         <Calendar size={12} />
                         {new Date(selectedNote.createdAt).toLocaleDateString()}
                       </span>
-                      <span className="text-xs text-white/40 flex items-center gap-1">
+                      <span className="text-xs text-text-muted flex items-center gap-1">
                         <Tag size={12} />
                         {selectedNote.tags.join(', ')}
                       </span>
@@ -403,13 +403,13 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
                         tags: [...selectedNote.tags]
                       });
                     }}
-                    className="p-3 rounded-xl bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 transition-all"
+                    className="p-3 rounded-xl bg-accent/10 text-accent hover:bg-accent hover:text-white transition-all shadow-sm"
                   >
                     <Edit3 size={20} />
                   </button>
                   <button 
                     onClick={() => deleteNote(selectedNote.id)}
-                    className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+                    className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm"
                   >
                     <Trash2 size={20} />
                   </button>
@@ -418,15 +418,15 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
 
               <div className="space-y-12">
                 <section>
-                  <h2 className="text-xs uppercase tracking-[0.3em] font-black text-white/20 mb-4">摘要</h2>
-                  <p className="text-lg text-white/80 leading-relaxed font-serif italic">
+                  <h2 className="text-xs uppercase tracking-[0.3em] font-black text-text-muted opacity-40 mb-4">摘要</h2>
+                  <p className="text-lg text-text-sub leading-relaxed font-serif italic border-l-4 border-accent/20 pl-6 py-1">
                     "{selectedNote.summary}"
                   </p>
                 </section>
 
                 <section>
-                  <h2 className="text-xs uppercase tracking-[0.3em] font-black text-white/20 mb-4">深度解析</h2>
-                  <div className="prose prose-invert max-w-none text-white/70 leading-loose">
+                  <h2 className="text-xs uppercase tracking-[0.3em] font-black text-text-muted opacity-40 mb-4">深度解析</h2>
+                  <div className="prose dark:prose-invert max-w-none text-text-sub leading-loose">
                     {selectedNote.content}
                   </div>
                 </section>
@@ -434,13 +434,13 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
                 {selectedNote.codeSnippet && (
                   <section>
                     <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-xs uppercase tracking-[0.3em] font-black text-white/20">核心实现</h2>
-                      <div className="flex items-center gap-2 px-2 py-1 rounded bg-blue-500/10 text-blue-400 text-[10px] font-bold uppercase">
+                      <h2 className="text-xs uppercase tracking-[0.3em] font-black text-text-muted opacity-40">核心实现</h2>
+                      <div className="flex items-center gap-2 px-2 py-1 rounded bg-blue-500/10 text-blue-500 dark:text-blue-400 text-[10px] font-bold uppercase">
                         <Code size={12} />
                         C++
                       </div>
                     </div>
-                    <pre className="p-6 rounded-2xl bg-[#1A1A1A] border border-white/5 overflow-x-auto font-mono text-sm text-blue-300/90 leading-relaxed">
+                    <pre className="p-6 rounded-2xl bg-secondary border border-border-main overflow-x-auto font-mono text-sm text-blue-600 dark:text-blue-300/90 leading-relaxed shadow-sm">
                       <code>{selectedNote.codeSnippet}</code>
                     </pre>
                   </section>
@@ -448,7 +448,7 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
 
                 {selectedNote.relatedIds.length > 0 && (
                   <section>
-                    <h2 className="text-xs uppercase tracking-[0.3em] font-black text-white/20 mb-4">语义连接</h2>
+                    <h2 className="text-xs uppercase tracking-[0.3em] font-black text-text-muted opacity-40 mb-4">语义连接</h2>
                     <div className="grid grid-cols-2 gap-4">
                       {selectedNote.relatedIds.map(rid => {
                         const related = notes.find(n => n.id === rid);
@@ -457,10 +457,10 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
                           <button
                             key={rid}
                             onClick={() => setSelectedNote(related)}
-                            className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-orange-500/30 transition-all text-left group"
+                            className="p-4 rounded-2xl bg-secondary border border-border-main hover:border-accent/30 transition-all text-left group shadow-sm"
                           >
-                            <h4 className="font-bold text-sm group-hover:text-orange-400 transition-colors">{related.title}</h4>
-                            <p className="text-[10px] text-white/40 mt-1 line-clamp-1">{related.summary}</p>
+                            <h4 className="font-bold text-sm text-text-main group-hover:text-accent transition-colors">{related.title}</h4>
+                            <p className="text-[10px] text-text-muted mt-1 line-clamp-1 opacity-70">{related.summary}</p>
                           </button>
                         );
                       })}
@@ -471,21 +471,21 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
                 {semanticDiscovery.length > 0 && (
                   <section>
                     <div className="flex items-center gap-2 mb-4">
-                      <h2 className="text-xs uppercase tracking-[0.3em] font-black text-white/20">语义发现</h2>
-                      <Sparkles size={12} className="text-orange-500 animate-pulse" />
+                      <h2 className="text-xs uppercase tracking-[0.3em] font-black text-text-muted opacity-40">语义发现</h2>
+                      <Sparkles size={12} className="text-accent animate-pulse" />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       {semanticDiscovery.map(({ note: related, similarity }) => (
                         <button
                           key={related.id}
                           onClick={() => setSelectedNote(related)}
-                          className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/10 hover:border-orange-500/30 transition-all text-left group relative overflow-hidden"
+                          className="p-4 rounded-2xl bg-accent/5 border border-accent/10 hover:border-accent/30 transition-all text-left group relative overflow-hidden shadow-sm"
                         >
-                          <div className="absolute top-0 right-0 px-2 py-0.5 bg-orange-500/10 text-orange-500 text-[8px] font-bold">
+                          <div className="absolute top-0 right-0 px-2 py-0.5 bg-accent/10 text-accent text-[8px] font-bold">
                             {Math.round(similarity * 100)}% 相似度
                           </div>
-                          <h4 className="font-bold text-sm group-hover:text-orange-400 transition-colors">{related.title}</h4>
-                          <p className="text-[10px] text-white/40 mt-1 line-clamp-1">{related.summary}</p>
+                          <h4 className="font-bold text-sm text-text-main group-hover:text-accent transition-colors">{related.title}</h4>
+                          <p className="text-[10px] text-text-muted mt-1 line-clamp-1 opacity-70">{related.summary}</p>
                         </button>
                       ))}
                     </div>
@@ -494,8 +494,8 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
               </div>
             </motion.div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-white/10">
-              <BookOpen size={80} strokeWidth={1} className="mb-6 opacity-20" />
+            <div className="h-full flex flex-col items-center justify-center text-text-muted opacity-20">
+              <BookOpen size={80} strokeWidth={1} className="mb-6" />
               <p className="text-sm font-bold uppercase tracking-[0.4em]">请选择一个资产以查看</p>
             </div>
           )}

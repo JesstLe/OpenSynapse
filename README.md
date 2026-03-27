@@ -439,13 +439,30 @@ OPENSYNAPSE_CLI_MODEL=gemini-2.5-pro npx tsx scripts/cli.ts ./file.txt
 
 支持的模型列表（位于 `src/lib/aiModels.ts`）：
 
-| 模型 | 用途 | 特点 |
-|------|------|------|
-| `gemini-3-flash-preview` | 快速对话 | 低延迟 |
-| `gemini-3.1-pro-preview` | 深度推理 | 高质量 |
-| `gemini-2.5-pro` | 通用任务 | 平衡 |
-| `gemini-2.5-flash` | 日常对话 | 稳定 |
-| `gemini-2.5-flash-lite` | 轻量任务 | 经济 |
+| Provider | 模型 ID | 认证方式 | 说明 |
+|------|------|------|------|
+| Gemini | `gemini/gemini-3-flash-preview` | Gemini CLI OAuth 或 `GEMINI_API_KEY` | Preview，多模态/agentic |
+| Gemini | `gemini/gemini-3.1-pro-preview` | Gemini CLI OAuth 或 `GEMINI_API_KEY` | Preview，复杂推理 |
+| Gemini | `gemini/gemini-2.5-pro` | Gemini CLI OAuth 或 `GEMINI_API_KEY` | 稳定高阶推理 |
+| Gemini | `gemini/gemini-2.5-flash` | Gemini CLI OAuth 或 `GEMINI_API_KEY` | 默认聊天模型 |
+| Gemini | `gemini/gemini-2.5-flash-lite` | Gemini CLI OAuth 或 `GEMINI_API_KEY` | 轻量 fallback |
+| OpenAI | `openai/gpt-5.2` | `OPENAI_API_KEY` | 当前官方 GPT-5 主力模型 |
+| OpenAI | `openai/gpt-5.2-pro` | `OPENAI_API_KEY` | 更强推理档位 |
+| OpenAI | `openai/gpt-5-mini` | `OPENAI_API_KEY` | 轻量低延迟 |
+| MiniMax | `minimax/MiniMax-M2.5` | `MINIMAX_API_KEY` | MiniMax 主力文本模型 |
+| MiniMax | `minimax/MiniMax-M2.5-highspeed` | `MINIMAX_API_KEY` | 低延迟 fallback |
+| Zhipu | `zhipu/glm-5` | `ZHIPU_API_KEY` | 智谱主力模型 |
+| Zhipu | `zhipu/glm-4.7` | `ZHIPU_API_KEY` | 稳定 fallback |
+| Moonshot | `moonshot/kimi-k2-thinking` | `MOONSHOT_API_KEY` | Kimi 推理模型 |
+| Moonshot | `moonshot/kimi-k2-thinking-turbo` | `MOONSHOT_API_KEY` | 低延迟推理模型 |
+| Moonshot | `moonshot/kimi-k2-0905-preview` | `MOONSHOT_API_KEY` | K2 Preview |
+| Moonshot | `moonshot/kimi-k2-turbo-preview` | `MOONSHOT_API_KEY` | 低延迟 Preview |
+
+补充说明：
+
+- 自定义模型请输入完整的 `provider/model`，例如 `openai/gpt-5.2`。
+- 资产提取、文档解构等结构化任务仍默认固定走 Gemini 稳定模型，避免不同 provider 的结构化输出差异影响功能。
+- 维护规则和未来扩展方式见 [docs/features/multi-provider-models.md](./docs/features/multi-provider-models.md)。
 
 ---
 

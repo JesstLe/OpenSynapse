@@ -169,17 +169,17 @@ ${flashcards
       <header className="mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Synapse 突触</h2>
-          <p className="text-xs md:text-sm text-white/40">实时监控你的知识网络与大脑负荷。</p>
+          <p className="text-xs md:text-sm text-text-muted">实时监控你的知识网络与大脑负荷。</p>
         </div>
         <button
           onClick={handleExport}
           disabled={isExporting || notes.length === 0}
-          className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm font-bold hover:bg-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-secondary border border-border-main rounded-2xl text-sm font-bold hover:bg-tertiary transition-all disabled:opacity-50 disabled:cursor-not-allowed text-text-main shadow-sm"
         >
           {isExporting ? (
-            <Loader2 size={18} className="animate-spin text-orange-500" />
+            <Loader2 size={18} className="animate-spin text-accent" />
           ) : (
-            <Download size={18} className="text-orange-500" />
+            <Download size={18} className="text-accent" />
           )}
           导出全部资产
         </button>
@@ -216,13 +216,13 @@ ${flashcards
       {/* Main Charts Area */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Knowledge Growth Chart */}
-        <div className="lg:col-span-2 bg-[#141414] border border-white/5 rounded-[24px] md:rounded-[32px] p-4 md:p-8">
+        <div className="lg:col-span-2 bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-4 md:p-8 shadow-sm">
           <div className="flex items-center justify-between mb-8">
             <h3 className="font-bold text-base md:text-lg flex items-center gap-2">
               <TrendingUp size={18} className="text-blue-500" />
               知识增长曲线
             </h3>
-            <span className="text-[8px] md:text-[10px] uppercase tracking-widest text-white/20 font-black">近 7 日累计</span>
+            <span className="text-[8px] md:text-[10px] uppercase tracking-widest text-text-muted font-black">近 7 日累计</span>
           </div>
           <div className="h-[200px] md:h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -233,22 +233,22 @@ ${flashcards
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="opacity-[0.05]" vertical={false} />
                 <XAxis 
                   dataKey="date" 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: '#ffffff40', fontSize: 10 }} 
+                  tick={{ fill: 'currentColor', fontSize: 10, opacity: 0.4 }} 
                   dy={10}
                 />
                 <YAxis 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: '#ffffff40', fontSize: 10 }} 
+                  tick={{ fill: 'currentColor', fontSize: 10, opacity: 0.4 }} 
                 />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid #ffffff10', borderRadius: '12px' }}
-                  itemStyle={{ color: '#fff' }}
+                  contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', color: 'var(--text-primary)' }}
+                  itemStyle={{ color: 'var(--text-primary)' }}
                 />
                 <Area 
                   type="monotone" 
@@ -264,10 +264,10 @@ ${flashcards
         </div>
 
         {/* Cognitive Load Indicator */}
-        <div className="bg-[#141414] border border-white/5 rounded-[24px] md:rounded-[32px] p-6 md:p-8 flex flex-col items-center justify-center text-center">
+        <div className="bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-6 md:p-8 flex flex-col items-center justify-center text-center shadow-sm">
           <div className="mb-6">
             <h3 className="font-bold text-base md:text-lg mb-1">认知负荷</h3>
-            <p className="text-[10px] md:text-xs text-white/40">当前大脑处理压力</p>
+            <p className="text-[10px] md:text-xs text-text-muted">当前大脑处理压力</p>
           </div>
           
           <div className="relative w-32 h-32 md:w-48 md:h-48 flex items-center justify-center">
@@ -279,7 +279,7 @@ ${flashcards
                 stroke="currentColor"
                 strokeWidth="10"
                 fill="transparent"
-                className="text-white/5"
+                className="opacity-5"
               />
               <circle
                 cx={window.innerWidth < 768 ? "64" : "96"}
@@ -297,8 +297,8 @@ ${flashcards
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-2xl md:text-4xl font-black">{reviewStats.load}%</span>
-              <span className="text-[8px] md:text-[10px] uppercase tracking-widest font-bold text-white/20 mt-1">
+              <span className="text-2xl md:text-4xl font-black text-text-main">{reviewStats.load}%</span>
+              <span className="text-[8px] md:text-[10px] uppercase tracking-widest font-bold text-text-muted mt-1">
                 {reviewStats.load > 80 ? '极高负荷' : reviewStats.load > 50 ? '中等负荷' : '低负荷'}
               </span>
             </div>
@@ -306,23 +306,23 @@ ${flashcards
 
           <div className="mt-8 w-full space-y-4">
             <div className="text-left">
-              <div className="text-[10px] text-white/20 uppercase font-black mb-3 tracking-widest">知识薄弱点 (Gap)</div>
+              <div className="text-[10px] text-text-muted uppercase font-black mb-3 tracking-widest">知识薄弱点 (Gap)</div>
               <div className="space-y-2">
                 {knowledgeGaps.length === 0 ? (
-                  <div className="text-xs text-white/20 italic">暂无明显薄弱环节</div>
+                  <div className="text-xs text-text-muted italic opacity-50">暂无明显薄弱环节</div>
                 ) : (
                   knowledgeGaps.map(gap => (
-                    <div key={gap.tag} className="group/gap flex flex-col p-3 rounded-2xl bg-white/5 border border-white/5 hover:border-orange-500/30 transition-all">
+                    <div key={gap.tag} className="group/gap flex flex-col p-3 rounded-2xl bg-secondary border border-border-main hocus:border-accent/30 transition-all">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-orange-500/80">#{gap.tag}</span>
+                        <span className="text-xs font-bold text-accent/80">#{gap.tag}</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-white/40">难度 {gap.avgDifficulty.toFixed(1)}</span>
+                          <span className="text-[10px] text-text-muted opacity-70">难度 {gap.avgDifficulty.toFixed(1)}</span>
                         </div>
                       </div>
                       <button
                         onClick={() => handleStartBreakthroughWithAnalysis(gap.tag, gap.failedCards)}
                         disabled={analyzingTag !== null}
-                        className="w-full py-2 rounded-xl bg-orange-500/10 text-orange-500 text-[10px] font-bold uppercase tracking-widest hover:bg-orange-500 hover:text-white transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="w-full py-2 rounded-xl bg-accent/10 text-accent text-[10px] font-bold uppercase tracking-widest hover:bg-accent hover:text-white transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                       >
                         {analyzingTag === gap.tag ? (
                           <Loader2 size={12} className="animate-spin" />
@@ -343,7 +343,7 @@ ${flashcards
       {/* Secondary Charts Area */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Difficulty Distribution Chart */}
-        <div className="bg-[#141414] border border-white/5 rounded-[24px] md:rounded-[32px] p-6 md:p-8">
+        <div className="bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-6 md:p-8 shadow-sm">
           <div className="flex items-center justify-between mb-8">
             <h3 className="font-bold text-base md:text-lg flex items-center gap-2">
               <Zap size={18} className="text-yellow-500" />
@@ -353,17 +353,17 @@ ${flashcards
           <div className="h-[200px] md:h-[250px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={difficultyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="opacity-[0.05]" vertical={false} />
                 <XAxis 
                   dataKey="name" 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: '#ffffff40', fontSize: 10 }} 
+                  tick={{ fill: 'currentColor', fontSize: 10, opacity: 0.4 }} 
                 />
                 <YAxis hide />
                 <Tooltip 
-                  cursor={{ fill: '#ffffff05' }}
-                  contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid #ffffff10', borderRadius: '12px' }}
+                  cursor={{ fill: 'currentColor', opacity: 0.05 }}
+                  contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', color: 'var(--text-primary)' }}
                 />
                 <Bar dataKey="value" radius={[8, 8, 0, 0]}>
                   {difficultyData.map((entry, index) => (
@@ -376,7 +376,7 @@ ${flashcards
         </div>
 
         {/* Daily Activity (Placeholder for now) */}
-        <div className="bg-[#141414] border border-white/5 rounded-[24px] md:rounded-[32px] p-6 md:p-8">
+        <div className="bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-6 md:p-8 shadow-sm">
           <div className="flex items-center justify-between mb-8">
             <h3 className="font-bold text-base md:text-lg flex items-center gap-2">
               <Calendar size={18} className="text-green-500" />
@@ -388,16 +388,16 @@ ${flashcards
               <div 
                 key={i} 
                 className={cn(
-                  "aspect-square rounded-sm md:rounded-md border border-white/5",
-                  Math.random() > 0.7 ? "bg-green-500/40" : Math.random() > 0.4 ? "bg-green-500/20" : "bg-white/5"
+                  "aspect-square rounded-sm md:rounded-md border border-border-main",
+                  Math.random() > 0.7 ? "bg-green-500/40" : Math.random() > 0.4 ? "bg-green-500/20" : "bg-secondary"
                 )}
               />
             ))}
           </div>
-          <div className="mt-4 flex items-center justify-between text-[10px] text-white/20 font-bold uppercase tracking-widest">
+          <div className="mt-4 flex items-center justify-between text-[10px] text-text-muted font-bold uppercase tracking-widest opacity-60">
             <span>较少</span>
             <div className="flex gap-1">
-              <div className="w-2 h-2 rounded-sm bg-white/5" />
+              <div className="w-2 h-2 rounded-sm bg-tertiary" />
               <div className="w-2 h-2 rounded-sm bg-green-500/20" />
               <div className="w-2 h-2 rounded-sm bg-green-500/40" />
               <div className="w-2 h-2 rounded-sm bg-green-500/60" />
@@ -414,16 +414,16 @@ function StatCard({ icon, label, value, subLabel }: { icon: React.ReactNode; lab
   return (
     <motion.div 
       whileHover={{ y: -5 }}
-      className="bg-[#141414] border border-white/5 rounded-[24px] p-6 transition-all hover:border-white/10"
+      className="bg-card border border-border-main rounded-[24px] p-6 transition-all shadow-sm hover:border-accent/20"
     >
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center">
+        <div className="w-8 h-8 rounded-xl bg-tertiary flex items-center justify-center">
           {icon}
         </div>
-        <span className="text-[10px] uppercase tracking-widest font-black text-white/20">{label}</span>
+        <span className="text-[10px] uppercase tracking-widest font-black text-text-muted opacity-80">{label}</span>
       </div>
-      <div className="text-3xl font-black mb-1">{value}</div>
-      <div className="text-[10px] text-white/40 font-bold">{subLabel}</div>
+      <div className="text-3xl font-black mb-1 text-text-main">{value}</div>
+      <div className="text-[10px] text-text-muted font-bold opacity-60">{subLabel}</div>
     </motion.div>
   );
 }

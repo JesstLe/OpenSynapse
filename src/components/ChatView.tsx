@@ -29,6 +29,7 @@ function getUserFacingAiError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   const resetMatch = message.match(/reset after (\d+s)/i);
   const resetHint = resetMatch ? ` 预计 ${resetMatch[1]} 后恢复。` : '';
+  const envVarMatch = message.match(/需要配置 ([A-Z0-9_]+)/);
 
   if (
     message.includes('MODEL_CAPACITY_EXHAUSTED') ||
@@ -36,7 +37,7 @@ function getUserFacingAiError(error: unknown): string {
     message.includes('rateLimitExceeded') ||
     message.includes('No capacity available for model')
   ) {
-    return `当前模型临时拥挤，${resetHint || '请稍后再试。'}你也可以切换到 Gemini 2.5 Pro、Gemini 2.5 Flash-Lite 或其他模型继续。`;
+    return `当前模型临时拥挤，${resetHint || '请稍后再试。'}你也可以切换到其他 provider 的模型继续。`;
   }
 
   if (
@@ -44,7 +45,11 @@ function getUserFacingAiError(error: unknown): string {
     message.includes('"status": "NOT_FOUND"') ||
     message.includes('Requested entity was not found')
   ) {
-    return '当前选择的模型在这条 Gemini CLI / Code Assist 链路上不可用。建议切换到 Gemini 3 Flash、Gemini 3.1 Pro、Gemini 2.5 Flash 或 Gemini 2.5 Flash-Lite。';
+    return '当前选择的模型在对应供应商 API 上不可用。请切换到同 provider 的其他模型，或改用官方稳定模型。';
+  }
+
+  if (envVarMatch) {
+    return `当前模型对应的供应商尚未配置密钥。请在 .env.local 中设置 ${envVarMatch[1]} 后重启服务。`;
   }
 
   if (message.includes('未找到可用的 AI 凭证') || message.includes('auth login')) {
@@ -462,14 +467,14 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
             initial={{ x: -300 }}
             animate={{ x: 0 }}
             exit={{ x: -300 }}
-            className="fixed inset-y-0 left-0 w-72 bg-[#0F0F0F] border-r border-white/10 z-50 flex flex-col shadow-2xl"
+            className="fixed inset-y-0 left-0 w-72 bg-sidebar border-r border-border-main z-50 flex flex-col shadow-2xl"
           >
-            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+            <div className="p-6 border-b border-border-main flex items-center justify-between">
               <h3 className="font-bold flex items-center gap-2">
-                <History size={18} className="text-orange-500" />
+                <History size={18} className="text-accent" />
                 历史会话
               </h3>
-              <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-white/5 rounded-lg">
+              <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-tertiary rounded-lg text-text-muted transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -477,7 +482,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
             <div className="p-4">
               <button 
                 onClick={startNewChat}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold hover:bg-white/10 transition-all mb-4"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-tertiary border border-border-main rounded-xl text-sm font-bold hover:bg-secondary transition-all mb-4 text-text-main shadow-sm"
               >
                 <Plus size={18} />
                 开启新对话
@@ -494,13 +499,15 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                   <div 
                     key={session.id}
                     className={cn(
-                      "group flex items-center gap-2 p-3 rounded-xl transition-all cursor-pointer",
-                      currentSessionId === session.id ? "bg-white/10 border border-white/10" : "hover:bg-white/5 border border-transparent"
+                      "group flex items-center gap-2 p-3 rounded-xl transition-all cursor-pointer border",
+                      currentSessionId === session.id 
+                        ? "bg-accent/10 border-accent/20 text-accent" 
+                        : "hover:bg-tertiary border-transparent text-text-sub"
                     )}
                     onClick={() => loadSession(session)}
                   >
                     <MessageSquare size={16} className={cn(
-                      currentSessionId === session.id ? "text-orange-500" : "text-white/20"
+                      currentSessionId === session.id ? "text-accent" : "text-text-muted"
                     )} />
                     <div className="flex-1 min-w-0">
                       {renamingSessionId === session.id ? (
@@ -514,12 +521,12 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                           }}
                           onBlur={() => handleRenameSession(session, renameInput)}
                           onClick={(e) => e.stopPropagation()}
-                          className="w-full bg-white/10 border border-orange-500/50 rounded-lg px-2 py-1 text-sm outline-none"
+                          className="w-full bg-primary border border-accent/50 rounded-lg px-2 py-1 text-sm outline-none text-text-main"
                         />
                       ) : (
                         <>
                           <p className="text-sm font-medium truncate">{session.title || '无标题会话'}</p>
-                          <p className="text-[10px] text-white/20 uppercase font-bold">{new Date(session.updatedAt).toLocaleDateString()}</p>
+                          <p className="text-[10px] text-text-muted uppercase font-bold">{new Date(session.updatedAt).toLocaleDateString()}</p>
                         </>
                       )}
                     </div>
@@ -529,7 +536,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                         setRenamingSessionId(session.id);
                         setRenameInput(session.title || '');
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-white/10 text-white/40 rounded-lg transition-all"
+                      className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-tertiary text-text-muted rounded-lg transition-all"
                       title="重命名"
                     >
                       <Pencil size={14} />
@@ -542,7 +549,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                           if (currentSessionId === session.id) startNewChat();
                         }
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-red-500 rounded-lg transition-all"
+                      className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/10 text-red-500 rounded-lg transition-all"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -564,42 +571,42 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
 
       <div className="flex flex-col h-full max-w-4xl mx-auto w-full relative">
         {/* Header */}
-        <div className="p-6 border-b border-white/5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-[#0A0A0A]/80 backdrop-blur-md sticky top-0 z-10">
-          <div className="flex items-center gap-4">
+        <div className="p-6 border-b border-border-main flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-primary/80 backdrop-blur-md sticky top-0 z-10">
+          <div className="flex items-center gap-4 text-text-main">
             <button 
               onClick={() => setShowHistory(true)}
-              className="p-2 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-tertiary text-text-muted hover:text-text-main transition-colors"
               title="查看历史"
             >
               <History size={20} />
             </button>
             <div>
               <h2 className="text-xl font-bold tracking-tight">学习会话</h2>
-              <p className="text-sm text-white/40">通过对话构建你的知识资产。</p>
+              <p className="text-sm text-text-muted">通过对话构建你的知识资产。</p>
             </div>
           </div>
           <div className="flex flex-col items-stretch gap-3 md:items-end">
             <div className="flex flex-col gap-2 md:items-end">
               <div className="flex items-center gap-2 justify-end">
-                <span className="text-[10px] uppercase tracking-[0.22em] text-white/30 font-bold">
+                <span className="text-[10px] uppercase tracking-[0.22em] text-text-muted font-bold">
                   模型
                 </span>
                 <select
                   value={isCustomModel ? '__custom__' : selectedModel}
                   onChange={handleModelSelect}
-                  className="min-w-[14rem] bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm font-medium text-white outline-none hover:bg-white/10 focus:border-orange-500/40"
+                  className="min-w-[14rem] bg-tertiary border border-border-main rounded-full px-4 py-2 text-sm font-medium text-text-main outline-none hover:bg-secondary focus:border-accent/40"
                 >
                   {AI_MODEL_OPTIONS.map((option) => (
-                    <option key={option.id} value={option.id} className="bg-[#111111] text-white">
+                    <option key={option.id} value={option.id} className="bg-primary text-text-main">
                       {option.label}
                     </option>
                   ))}
-                  <option value="__custom__" className="bg-[#111111] text-white">
+                  <option value="__custom__" className="bg-primary text-text-main">
                     自定义模型 ID
                   </option>
                 </select>
               </div>
-              <p className="max-w-[20rem] text-left md:text-right text-[11px] leading-relaxed text-white/35">
+              <p className="max-w-[20rem] text-left md:text-right text-[11px] leading-relaxed text-text-muted opacity-80">
                 {currentModelOption?.description || `当前使用自定义模型：${selectedModel}`}
               </p>
               {isCustomModel && (
@@ -613,12 +620,12 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                         handleCustomModelSubmit();
                       }
                     }}
-                    placeholder="例如 gemini-3.1-pro-preview"
-                    className="w-full md:w-64 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-white/20 outline-none focus:border-orange-500/40"
+                    placeholder="例如 openai/gpt-5.2 或 gemini/gemini-3.1-pro-preview"
+                    className="w-full md:w-64 rounded-full border border-border-main bg-tertiary px-4 py-2 text-sm text-text-main placeholder:text-text-muted/40 outline-none focus:border-accent/40"
                   />
                   <button
                     onClick={handleCustomModelSubmit}
-                    className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/15 transition-colors"
+                    className="rounded-full bg-secondary px-4 py-2 text-sm font-bold text-text-main hover:bg-tertiary transition-colors"
                   >
                     应用
                   </button>
@@ -628,7 +635,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
             <div className="flex items-center gap-3 justify-end">
               <button
                 onClick={onBackToDashboard}
-                className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm bg-white/5 hover:bg-white/10 transition-all"
+                className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm bg-tertiary text-text-sub hover:bg-secondary transition-all"
               >
                 <LayoutDashboard size={16} />
                 仪表盘
@@ -637,10 +644,10 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                 onClick={handleProcess}
                 disabled={!hasExtractableConversation || isProcessBusy}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm transition-all",
+                  "flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm transition-all shadow-md",
                   !hasExtractableConversation || isProcessBusy
-                    ? "bg-white/5 text-white/20 cursor-not-allowed"
-                    : "bg-orange-500 hover:bg-orange-600 text-white shadow-[0_0_20px_rgba(249,115,22,0.2)] active:scale-95"
+                    ? "bg-tertiary text-text-muted/40 cursor-not-allowed"
+                    : "bg-accent hover:bg-accent-hover text-white shadow-accent/20 active:scale-95"
                 )}
               >
                 {isProcessBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -705,16 +712,16 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
           >
             {/* 思考过程折叠展示 */}
             {msg.role === 'model' && msg.thought && showThinking && (
-              <details className="mb-1 w-full text-xs text-white/30 bg-white/5 border border-white/5 rounded-xl p-2 max-h-48 overflow-y-auto">
-                <summary className="cursor-pointer font-bold select-none">💭 思考过程</summary>
-                <div className="mt-2 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-white/25">{msg.thought}</div>
+              <details className="mb-1 w-full text-xs text-text-muted bg-tertiary border border-border-main rounded-xl p-2 max-h-48 overflow-y-auto">
+                <summary className="cursor-pointer font-bold select-none opacity-60">💭 思考过程</summary>
+                <div className="mt-2 whitespace-pre-wrap font-mono text-[11px] leading-relaxed opacity-50">{msg.thought}</div>
               </details>
             )}
             <div className={cn(
               "px-4 py-3 rounded-2xl text-sm leading-relaxed group/msg relative",
               msg.role === 'user' 
-                ? "bg-white/10 text-white rounded-tr-none" 
-                : "bg-[#1A1A1A] text-white/90 border border-white/5 rounded-tl-none"
+                ? "bg-accent text-white rounded-tr-none shadow-sm shadow-accent/10" 
+                : "bg-secondary text-text-main border border-border-main rounded-tl-none shadow-sm shadow-black/5"
             )}>
               {msg.image && (
                 <div className="mb-3 rounded-lg overflow-hidden border border-white/10">
@@ -732,7 +739,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEditResend(i, editInput); }
                       if (e.key === 'Escape') setEditingMessageIdx(null);
                     }}
-                    className="w-full bg-white/5 border border-orange-500/50 rounded-lg px-3 py-2 text-sm outline-none resize-none min-h-[60px]"
+                    className="w-full bg-primary/20 border border-white/20 rounded-lg px-3 py-2 text-sm outline-none resize-none min-h-[60px] text-white"
                   />
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setEditingMessageIdx(null)} className="px-3 py-1 text-xs text-white/40 hover:text-white rounded-lg">
@@ -752,17 +759,17 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               )}
             </div>
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold">
+              <span className="text-[10px] text-text-muted uppercase tracking-widest font-bold">
                 {msg.role === 'user' ? '你' : '导师'}
               </span>
               {/* 复制按钮：所有有内容的消息都显示 */}
               {msg.text && !isLoading && (
                 <button
                   onClick={() => handleCopy(msg.text, i)}
-                  className="flex items-center gap-1 text-[10px] text-white/20 hover:text-orange-500 transition-colors uppercase tracking-widest font-bold"
+                  className="flex items-center gap-1 text-[10px] text-text-muted hover:text-accent transition-colors uppercase tracking-widest font-bold"
                   title="复制"
                 >
-                  {copiedIdx === i ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                  {copiedIdx === i ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
                   {copiedIdx === i ? '已复制' : '复制'}
                 </button>
               )}
@@ -770,7 +777,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               {msg.role === 'user' && !isLoading && editingMessageIdx !== i && (
                 <button
                   onClick={() => { setEditingMessageIdx(i); setEditInput(msg.text); }}
-                  className="flex items-center gap-1 text-[10px] text-white/20 hover:text-orange-500 transition-colors uppercase tracking-widest font-bold"
+                  className="flex items-center gap-1 text-[10px] text-text-muted hover:text-accent transition-colors uppercase tracking-widest font-bold"
                   title="编辑并重发"
                 >
                   <Edit3 size={12} /> 编辑
@@ -780,7 +787,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               {msg.role === 'model' && i === messages.length - 1 && !isLoading && msg.text && (
                 <button
                   onClick={handleRegenerate}
-                  className="flex items-center gap-1 text-[10px] text-white/20 hover:text-orange-500 transition-colors uppercase tracking-widest font-bold"
+                  className="flex items-center gap-1 text-[10px] text-text-muted hover:text-accent transition-colors uppercase tracking-widest font-bold"
                   title="重新生成"
                 >
                   <RefreshCw size={12} /> 重新生成
@@ -805,72 +812,72 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[#1A1A1A] border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl"
+              className="bg-card border border-border-main rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl"
             >
-              <div className="p-6 border-b border-white/5 flex justify-between items-center">
+              <div className="p-6 border-b border-border-main flex justify-between items-center bg-sidebar">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-orange-500/10 rounded-lg text-orange-500">
+                  <div className="p-2 bg-accent/20 rounded-lg text-accent">
                     <FileText size={20} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg">文档解构选项</h3>
-                    <p className="text-xs text-white/40 truncate max-w-[200px]">{selectedFile.name}</p>
+                    <h3 className="font-bold text-lg text-text-main">文档解构选项</h3>
+                    <p className="text-xs text-text-muted truncate max-w-[200px]">{selectedFile.name}</p>
                   </div>
                 </div>
-                <button onClick={() => { setSelectedFile(null); setShowPdfOptions(false); setPdfAnalysis(null); }} className="p-2 hover:bg-white/5 rounded-xl">
+                <button onClick={() => { setSelectedFile(null); setShowPdfOptions(false); setPdfAnalysis(null); }} className="p-2 hover:bg-tertiary rounded-xl text-text-muted transition-colors">
                   <X size={20} />
                 </button>
               </div>
 
-              <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+              <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto bg-primary">
                 {!pdfAnalysis ? (
                   <div className="grid grid-cols-1 gap-4">
                     <button
                       onClick={() => handleDeconstruct(1, 20)}
-                      className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-all group"
+                      className="flex items-center justify-between p-4 bg-tertiary border border-border-main rounded-xl hover:bg-secondary transition-all group shadow-sm"
                     >
                       <div className="text-left">
-                        <div className="font-bold group-hover:text-orange-500 transition-colors">快速解构</div>
-                        <div className="text-xs text-white/40">分析文档前 20 页内容</div>
+                        <div className="font-bold text-text-main group-hover:text-accent transition-colors">快速解构</div>
+                        <div className="text-xs text-text-muted opacity-60">分析文档前 20 页内容</div>
                       </div>
-                      <ChevronRight size={18} className="text-white/20" />
+                      <ChevronRight size={18} className="text-text-muted opacity-40" />
                     </button>
 
                     <button
                       onClick={handleAnalyzeTOC}
                       disabled={isDeconstructing}
-                      className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-all group"
+                      className="flex items-center justify-between p-4 bg-tertiary border border-border-main rounded-xl hover:bg-secondary transition-all group shadow-sm"
                     >
                       <div className="text-left">
-                        <div className="font-bold group-hover:text-orange-500 transition-colors">
+                        <div className="font-bold text-text-main group-hover:text-accent transition-colors">
                           {isDeconstructing ? "正在解析目录..." : "分段解构 (推荐教材)"}
                         </div>
-                        <div className="text-xs text-white/40">AI 自动识别目录，让你选择特定章节</div>
+                        <div className="text-xs text-text-muted opacity-60">AI 自动识别目录，让你选择特定章节</div>
                       </div>
-                      {isDeconstructing ? <Loader2 size={18} className="animate-spin text-orange-500" /> : <BookOpen size={18} className="text-white/20" />}
+                      {isDeconstructing ? <Loader2 size={18} className="animate-spin text-accent" /> : <BookOpen size={18} className="text-text-muted opacity-40" />}
                     </button>
 
-                    <div className="p-4 bg-white/5 border border-white/5 rounded-xl">
-                      <div className="font-bold mb-3">自定义范围</div>
+                    <div className="p-4 bg-tertiary border border-border-main rounded-xl shadow-sm">
+                      <div className="font-bold text-text-main mb-3">自定义范围</div>
                       <div className="flex items-center gap-3">
                         <input
                           type="number"
                           value={customRange.start}
                           onChange={(e) => setCustomRange({ ...customRange, start: parseInt(e.target.value) })}
-                          className="w-20 bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm"
+                          className="w-20 bg-primary border border-border-main rounded-lg px-3 py-1.5 text-sm text-text-main"
                           min={1}
                         />
-                        <span className="text-white/40">至</span>
+                        <span className="text-text-muted font-medium">至</span>
                         <input
                           type="number"
                           value={customRange.end}
                           onChange={(e) => setCustomRange({ ...customRange, end: parseInt(e.target.value) })}
-                          className="w-20 bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm"
+                          className="w-20 bg-primary border border-border-main rounded-lg px-3 py-1.5 text-sm text-text-main"
                           min={customRange.start}
                         />
                         <button
                           onClick={() => handleDeconstruct(customRange.start, customRange.end)}
-                          className="flex-1 bg-orange-500 text-white font-bold py-1.5 rounded-lg text-sm hover:bg-orange-600"
+                          className="flex-1 bg-accent text-white font-bold py-1.5 rounded-lg text-sm hover:bg-accent-hover transition-all shadow-sm"
                         >
                           开始解构
                         </button>
@@ -879,27 +886,27 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="text-sm font-bold text-orange-500 flex items-center gap-2">
+                    <div className="text-sm font-bold text-accent flex items-center gap-2">
                       <Sparkles size={14} /> AI 已识别以下章节：
                     </div>
                     {pdfAnalysis.chapters.map((chapter, idx) => (
                       <button
                         key={idx}
                         onClick={() => handleDeconstruct(chapter.startPage, chapter.endPage)}
-                        className="w-full text-left p-4 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-all group"
+                        className="w-full text-left p-4 bg-tertiary border border-border-main rounded-xl hover:bg-secondary transition-all group shadow-sm"
                       >
                         <div className="flex justify-between items-start mb-1">
-                          <div className="font-bold group-hover:text-orange-500 transition-colors">{chapter.title}</div>
-                          <div className="text-[10px] bg-orange-500/20 text-orange-500 px-2 py-0.5 rounded-full">
+                          <div className="font-bold text-text-main group-hover:text-accent transition-colors">{chapter.title}</div>
+                          <div className="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded-full font-bold">
                             P{chapter.startPage} - P{chapter.endPage}
                           </div>
                         </div>
-                        <div className="text-xs text-white/40 line-clamp-2">{chapter.summary}</div>
+                        <div className="text-xs text-text-muted line-clamp-2 opacity-70">{chapter.summary}</div>
                       </button>
                     ))}
                     <button
                       onClick={() => setPdfAnalysis(null)}
-                      className="w-full py-2 text-xs text-white/20 hover:text-white transition-colors"
+                      className="w-full py-2 text-xs text-text-muted hover:text-text-main transition-colors font-medium"
                     >
                       返回选项
                     </button>
@@ -912,7 +919,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
       </AnimatePresence>
 
       {/* Input */}
-      <div className="p-6 bg-gradient-to-t from-[#0A0A0A] to-transparent">
+      <div className="p-6 bg-gradient-to-t from-primary to-transparent">
         <AnimatePresence>
           {showUrlInput && (
             <motion.div
@@ -926,7 +933,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
                 placeholder="输入文章或网页 URL..."
-                className="flex-1 bg-[#1A1A1A] border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-orange-500/50"
+                className="flex-1 bg-secondary border border-border-main rounded-xl px-4 py-2 text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:border-accent/50 shadow-sm"
               />
               <button
                 onClick={handleUrlImport}
@@ -1002,14 +1009,14 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
           <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 transition-all"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-main hover:bg-tertiary transition-all"
               title="上传图片"
             >
               <ImageIcon size={18} />
             </button>
             <button
               onClick={() => docInputRef.current?.click()}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 transition-all"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-main hover:bg-tertiary transition-all"
               title="上传文档 (PDF/Text)"
             >
               <FileUp size={18} />
@@ -1018,7 +1025,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               onClick={() => setShowUrlInput(!showUrlInput)}
               className={cn(
                 "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
-                showUrlInput ? "text-orange-500 bg-orange-500/10" : "text-white/40 hover:text-white hover:bg-white/5"
+                showUrlInput ? "text-accent bg-accent/10" : "text-text-muted hover:text-text-main hover:bg-tertiary"
               )}
               title="从 URL 导入"
             >
@@ -1035,7 +1042,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               }
             }}
             placeholder="询问概念、算法或代码..."
-            className="w-full bg-[#1A1A1A] border border-white/10 rounded-2xl pl-40 pr-16 py-4 text-sm focus:outline-none focus:border-orange-500/50 transition-all resize-none h-16 group-hover:border-white/20"
+            className="w-full bg-secondary border border-border-main rounded-2xl pl-40 pr-16 py-4 text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:border-accent/50 transition-all resize-none h-16 group-hover:border-border-accent/30 shadow-sm"
           />
           {isLoading ? (
             <button
@@ -1052,15 +1059,15 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               className={cn(
                 "absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl flex items-center justify-center transition-all",
                 !input.trim() && !selectedImage
-                  ? "text-white/20"
-                  : "bg-orange-500 text-white hover:bg-orange-600 shadow-lg"
+                  ? "text-text-muted opacity-30"
+                  : "bg-accent text-white hover:bg-accent-hover shadow-lg shadow-accent/20"
               )}
             >
               <Send size={18} />
             </button>
           )}
         </div>
-        <p className="text-[10px] text-center mt-3 text-white/20 uppercase tracking-widest font-medium">
+        <p className="text-[10px] text-center mt-3 text-text-muted opacity-50 uppercase tracking-widest font-medium">
           按 Enter 发送 • Shift+Enter 换行
         </p>
       </div>

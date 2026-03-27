@@ -388,30 +388,35 @@ export default function App() {
 
   if (!isAuthReady || isLoadingData) {
     return (
-      <div className="h-screen bg-[#0A0A0A] flex flex-col items-center justify-center gap-4">
-        <div className="w-20 h-20 rounded-2xl bg-white overflow-hidden flex items-center justify-center animate-pulse shadow-[0_0_30px_rgba(255,255,255,0.1)]">
-          <img src="/logo.png" className="w-14 h-14 object-contain" alt="OpenSynapse Logo" />
+      <div className="h-screen bg-primary flex flex-col items-center justify-center gap-6">
+        <div className="w-24 h-24 rounded-3xl bg-secondary overflow-hidden flex items-center justify-center animate-pulse shadow-2xl border border-border-main relative">
+          <div className="absolute inset-0 bg-accent/5 animate-pulse" />
+          <img src="/logo.png" className="w-16 h-16 object-contain relative z-10" alt="OpenSynapse Logo" />
         </div>
-        <p className="text-xs font-bold uppercase tracking-[0.3em] text-white/20">正在同步突触资产...</p>
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-xs font-black uppercase tracking-[0.4em] text-accent animate-pulse">Synapse</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted opacity-40">正在同步突触资产...</p>
+        </div>
       </div>
     );
   }
 
   if (!user && !isUsingDevAuthBypass) {
     return (
-      <div className="h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-6">
-        <div className="w-28 h-28 rounded-[2rem] bg-white flex items-center justify-center shadow-[0_0_60px_rgba(255,255,255,0.15)] mb-8 overflow-hidden transform hover:scale-110 transition-transform duration-500">
-          <img src="/logo.png" className="w-20 h-20 object-contain" alt="OpenSynapse Logo" />
+      <div className="h-screen bg-primary flex flex-col items-center justify-center p-6 text-text-main">
+        <div className="w-32 h-32 rounded-[2.5rem] bg-secondary flex items-center justify-center shadow-2xl mb-10 overflow-hidden transform hover:scale-110 transition-transform duration-500 border border-border-main relative group">
+          <div className="absolute inset-0 bg-gradient-to-br from-accent/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <img src="/logo.png" className="w-24 h-24 object-contain relative z-10" alt="OpenSynapse Logo" />
         </div>
-        <h1 className="text-4xl font-black tracking-tighter mb-4 text-center">Synapse 突触</h1>
-        <p className="text-white/40 text-center max-w-md mb-12 leading-relaxed">
-          欢迎来到你的外挂式海马体。通过 AI 驱动的知识捕获与算法化复习，构建你的神经网络。
+        <h1 className="text-5xl font-black tracking-tighter mb-4 text-center bg-gradient-to-br from-text-main to-text-main/60 bg-clip-text text-transparent">Synapse 突触</h1>
+        <p className="text-text-sub text-center max-w-sm mb-12 leading-relaxed opacity-60 font-medium">
+          通过 AI 驱动的知识捕获与算法化复习，构建你的神经网络。
         </p>
         <button
           onClick={handleLogin}
-          className="px-8 py-4 bg-white text-black rounded-2xl font-bold flex items-center gap-3 hover:bg-orange-500 hover:text-white transition-all active:scale-95"
+          className="px-8 py-4 bg-accent text-white rounded-2xl font-bold flex items-center gap-3 hover:bg-accent-hover transition-all active:scale-95 shadow-xl shadow-accent/20 hover:shadow-accent/40"
         >
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5 bg-white rounded-sm p-0.5" alt="Google" />
           使用 Google 账号登录
         </button>
       </div>
@@ -419,35 +424,17 @@ export default function App() {
   }
 
   return (
-    <div 
-      className="flex flex-col md:flex-row h-screen font-sans overflow-hidden transition-colors duration-300"
-      style={{ 
-        backgroundColor: 'var(--bg-primary)', 
-        color: 'var(--text-primary)' 
-      }}
-    >
+    <div className="flex flex-col md:flex-row h-screen font-sans overflow-hidden transition-colors duration-300 bg-primary text-text-main">
       {/* Sidebar (Desktop) */}
-      <nav 
-        className="hidden md:flex w-64 flex-col transition-colors duration-300"
-        style={{ 
-          backgroundColor: 'var(--bg-sidebar)',
-          borderRight: '1px solid var(--border-color)'
-        }}
-      >
+      <nav className="hidden md:flex w-64 flex-col transition-colors duration-300 bg-sidebar border-r border-border-main">
         <div 
-          className="p-6 flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+          className="p-6 flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity group"
           onClick={() => setActiveView('dashboard')}
         >
-          <div 
-            className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden transition-colors duration-300"
-            style={{ 
-              backgroundColor: isDarkMode ? '#ffffff' : '#1a1a2e',
-              boxShadow: '0 0 15px var(--shadow-color)'
-            }}
-          >
-            <img src="/logo.png" className="w-7 h-7 object-contain" alt="Logo" />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden transition-all duration-300 shadow-sm bg-secondary border border-border-main group-hover:border-accent/30">
+            <img src="/logo.png" className="w-8 h-8 object-contain" alt="Logo" />
           </div>
-          <span className="font-bold text-lg tracking-tight">Synapse 突触</span>
+          <span className="font-bold text-lg tracking-tight group-hover:text-accent transition-colors">Synapse 突触</span>
         </div>
 
         <div className="flex-1 px-4 space-y-2 mt-4">
@@ -489,24 +476,14 @@ export default function App() {
           />
         </div>
 
-        <div 
-          className="p-4 space-y-2"
-          style={{ borderTop: '1px solid var(--border-color)' }}
-        >
+        <div className="p-4 space-y-2 border-t border-border-main">
           <div className="px-4 py-2 flex items-center justify-between">
-            <span 
-              className="text-[10px] uppercase tracking-widest font-semibold"
-              style={{ color: 'var(--text-muted)' }}
-            >
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-text-muted">
               {isUsingDevAuthBypass ? '开发模式' : '账户'}
             </span>
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 rounded-lg transition-all duration-200 hover:scale-110"
-              style={{ 
-                backgroundColor: 'var(--bg-tertiary)',
-                color: 'var(--text-secondary)'
-              }}
+              className="p-2 rounded-lg transition-all duration-200 hover:scale-110 bg-tertiary text-text-sub"
               title={isDarkMode ? '切换到亮色模式' : '切换到暗色模式'}
             >
               {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
@@ -516,19 +493,11 @@ export default function App() {
             {user?.photoURL ? (
               <img 
                 src={user.photoURL} 
-                className="w-8 h-8 rounded-full" 
-                style={{ border: '1px solid var(--border-color)' }}
+                className="w-8 h-8 rounded-full border border-border-main" 
                 alt={user.displayName || ''} 
               />
             ) : (
-              <div 
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-300"
-                style={{ 
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-tertiary)',
-                  color: 'var(--text-muted)'
-                }}
-              >
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-300 border border-border-main bg-tertiary text-text-muted">
                 {isUsingDevAuthBypass ? 'DEV' : '?'}
               </div>
             )}
@@ -536,8 +505,7 @@ export default function App() {
               <p className="text-xs font-bold truncate">{user?.displayName || '本地开发免登录'}</p>
               <button 
                 onClick={handleLogout} 
-                className="text-[10px] transition-colors hover:text-[var(--accent-color)]"
-                style={{ color: 'var(--text-muted)' }}
+                className="text-[10px] transition-colors hover:text-accent text-text-muted"
               >
                 {isUsingDevAuthBypass ? '清空开发态' : '退出登录'}
               </button>
@@ -547,13 +515,7 @@ export default function App() {
       </nav>
 
       {/* Bottom Navigation (Mobile) */}
-      <nav 
-        className="md:hidden fixed bottom-0 left-0 right-0 h-16 flex items-center justify-around px-2 z-50 transition-colors duration-300"
-        style={{ 
-          backgroundColor: 'var(--bg-sidebar)',
-          borderTop: '1px solid var(--border-color)'
-        }}
-      >
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 flex items-center justify-around px-2 z-50 transition-colors duration-300 bg-sidebar border-t border-border-main">
         <MobileNavItem 
           icon={<LayoutDashboard size={20} />} 
           active={activeView === 'dashboard'} 
@@ -645,6 +607,7 @@ export default function App() {
               flashcards={flashcards}
               onNodeClick={navigateToNote}
               onNodeEdit={(id) => navigateToNote(id, true)}
+              isDarkMode={isDarkMode}
             />
           )}
           {activeView === 'review' && (
@@ -692,18 +655,14 @@ function MobileNavItem({ icon, active, onClick, badge, isDarkMode }: { icon: Rea
       className={cn(
         "relative p-3 rounded-xl transition-all",
         active 
-          ? "text-orange-500" 
-          : isDarkMode 
-            ? "text-white/40 hover:text-white" 
-            : "text-gray-400 hover:text-gray-900"
+          ? "text-accent bg-accent/10" 
+          : "text-text-muted hover:text-text-main hover:bg-tertiary"
       )}
-      style={active ? { backgroundColor: 'rgba(249, 115, 22, 0.1)' } : {}}
     >
       {icon}
       {badge !== undefined && badge > 0 && (
         <span 
-          className="absolute top-2 right-2 w-4 h-4 text-white text-[8px] font-black flex items-center justify-center rounded-full border-2"
-          style={{ backgroundColor: 'var(--accent-color)', borderColor: 'var(--bg-sidebar)' }}
+          className="absolute top-2 right-2 w-4 h-4 text-white text-[8px] font-black flex items-center justify-center rounded-full border-2 bg-accent border-sidebar"
         >
           {badge > 99 ? '99+' : badge}
         </span>
@@ -726,18 +685,9 @@ function NavItem({ icon, label, active, onClick, badge, isDarkMode }: {
       className={cn(
         "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative",
         active 
-          ? "shadow-[inset_0_1px_1px_rgba(0,0,0,0.1)]" 
-          : isDarkMode
-            ? "hover:bg-white/5"
-            : "hover:bg-black/5"
+          ? "bg-accent/10 text-text-main shadow-sm"
+          : "hover:bg-tertiary text-text-sub"
       )}
-      style={active 
-        ? { 
-            backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-            color: 'var(--text-primary)'
-          }
-        : { color: 'var(--text-muted)' }
-      }
     >
       <div className={cn(
         "transition-transform duration-200",

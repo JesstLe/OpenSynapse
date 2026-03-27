@@ -57,7 +57,7 @@ export default function ReviewView({ flashcards, notes, onBackToDashboard, onRev
             setCurrentIndex(0); 
             onBackToDashboard?.();
           }}
-          className="mt-8 px-8 py-3 bg-white/10 hover:bg-white/20 rounded-full font-bold text-sm transition-all"
+          className="mt-8 px-8 py-3 bg-secondary hover:bg-tertiary rounded-full font-bold text-sm transition-all text-text-main shadow-sm"
         >
           返回仪表盘
         </button>
@@ -69,10 +69,10 @@ export default function ReviewView({ flashcards, notes, onBackToDashboard, onRev
     <div className="flex flex-col h-full max-w-2xl mx-auto w-full p-6">
       <div className="flex items-center justify-between mb-12">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">主动召回</h2>
-          <p className="text-sm text-white/40">今天需要强化 {dueCards.length} 个概念。</p>
+          <h2 className="text-2xl font-bold tracking-tight text-text-main">主动召回</h2>
+          <p className="text-sm text-text-muted">今天需要强化 {dueCards.length} 个概念。</p>
         </div>
-        <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest">
+        <div className="px-3 py-1 rounded-full bg-secondary border border-border-main text-[10px] font-bold uppercase tracking-widest text-text-sub shadow-sm">
           {currentIndex + 1} / {dueCards.length}
         </div>
       </div>
@@ -90,16 +90,16 @@ export default function ReviewView({ flashcards, notes, onBackToDashboard, onRev
           onClick={() => setIsFlipped(!isFlipped)}
         >
           {/* Front */}
-          <div className="absolute inset-0 bg-[#1A1A1A] border border-white/10 rounded-[24px] md:rounded-[32px] p-8 md:p-12 flex flex-col items-center justify-center text-center backface-hidden shadow-2xl">
-            <div className="absolute top-6 left-6 md:top-8 md:left-8 text-[10px] uppercase tracking-[0.2em] font-black text-orange-500/50">问题</div>
-            <h3 className="text-xl md:text-2xl font-medium leading-relaxed">{currentCard.question}</h3>
-            <div className="absolute bottom-6 md:bottom-8 text-[10px] md:text-xs text-white/20 font-bold uppercase tracking-widest animate-pulse">点击显示答案</div>
+          <div className="absolute inset-0 bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-8 md:p-12 flex flex-col items-center justify-center text-center backface-hidden shadow-2xl">
+            <div className="absolute top-6 left-6 md:top-8 md:left-8 text-[10px] uppercase tracking-[0.2em] font-black text-accent opacity-50">问题</div>
+            <h3 className="text-xl md:text-2xl font-medium leading-relaxed text-text-main">{currentCard.question}</h3>
+            <div className="absolute bottom-6 md:bottom-8 text-[10px] md:text-xs text-text-muted font-bold uppercase tracking-widest animate-pulse">点击显示答案</div>
           </div>
 
           {/* Back */}
-          <div className="absolute inset-0 bg-[#1A1A1A] border border-orange-500/30 rounded-[24px] md:rounded-[32px] p-8 md:p-12 flex flex-col items-center justify-center text-center backface-hidden shadow-2xl [transform:rotateY(180deg)]">
+          <div className="absolute inset-0 bg-card border border-accent/30 rounded-[24px] md:rounded-[32px] p-8 md:p-12 flex flex-col items-center justify-center text-center backface-hidden shadow-2xl [transform:rotateY(180deg)]">
             <div className="absolute top-6 left-6 md:top-8 md:left-8 text-[10px] uppercase tracking-[0.2em] font-black text-green-500/50">答案</div>
-            <p className="text-lg md:text-xl text-white/80 leading-relaxed">{currentCard.answer}</p>
+            <p className="text-lg md:text-xl text-text-sub leading-relaxed">{currentCard.answer}</p>
           </div>
         </motion.div>
 
@@ -148,12 +148,12 @@ function RatingButton({ label, color, onClick, nextReview }: { label: string; co
     <button
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       className={cn(
-        "flex flex-col items-center gap-2 p-4 rounded-2xl transition-all hover:scale-105 active:scale-95 bg-white/5 hover:bg-white/10 border border-white/5",
+        "flex flex-col items-center gap-2 p-4 rounded-2xl transition-all hover:scale-105 active:scale-95 bg-secondary hover:bg-tertiary border border-border-main shadow-sm",
       )}
     >
       <div className={cn("w-3 h-3 rounded-full", color)} />
-      <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">{label}</span>
-      <span className="text-[8px] text-white/30 font-medium">{getIntervalString(nextReview)}</span>
+      <span className="text-[10px] font-bold uppercase tracking-widest text-text-main">{label}</span>
+      <span className="text-[8px] text-text-muted font-medium">{getIntervalString(nextReview)}</span>
     </button>
   );
 }

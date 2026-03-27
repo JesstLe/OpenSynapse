@@ -3,6 +3,15 @@ import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { generateContentWithCodeAssist, generateContentStreamWithCodeAssist } from '../lib/codeAssist.js';
 import {
+  generateContentStreamWithApiKeyProvider,
+  generateContentWithApiKeyProvider,
+} from '../lib/providerGateway.js';
+import {
+  getApiModelId,
+  getProviderForModel,
+  parseModelSelection,
+} from '../lib/aiModels.js';
+import {
   isCredentialsCompatible,
   loadCredentials,
   resolveOAuthClientConfig,
@@ -21,11 +30,29 @@ if (apiKey && apiKey !== 'AIzaSy...') {
   console.log('[Server] No valid GEMINI_API_KEY found. AI routes will prefer Code Assist OAuth.');
 }
 
+function withApiModelId(params: any) {
+  return {
+    ...params,
+    model: getApiModelId(params?.model),
+  };
+}
+
 // ─── 非流式路由（用于 JSON 结构化输出等场景） ───
 
 async function generateContent(params: any): Promise<{ text: string }> {
+  const parsed = parseModelSelection(params?.model);
+  if (parsed.provider !== 'gemini') {
+    const response = await generateContentWithApiKeyProvider({
+      ...params,
+      model: parsed.canonicalId,
+    });
+    return { text: response.text };
+  }
+
+  const geminiParams = withApiModelId(params);
+
   if (apiKeyClient) {
-    const response = await apiKeyClient.models.generateContent(params);
+    const response = await apiKeyClient.models.generateContent(geminiParams);
     return { text: response.text };
   }
 
@@ -39,7 +66,7 @@ async function generateContent(params: any): Promise<{ text: string }> {
     throw new Error('已保存的 OAuth 凭证与当前 Gemini CLI client 不兼容，请重新运行 `npx tsx cli.ts auth login`。');
   }
 
-  const response = await generateContentWithCodeAssist(params, clientConfig);
+  const response = await generateContentWithCodeAssist(geminiParams, clientConfig);
   return { text: response.text };
 }
 
@@ -71,9 +98,18 @@ router.post('/generateContentStream', async (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no'); // 防止反向代理缓冲 SSE
 
   try {
-    if (apiKeyClient) {
+    const parsed = parseModelSelection(req.body?.model);
+    if (parsed.provider !== 'gemini') {
+      const stream = generateContentStreamWithApiKeyProvider({
+        ...req.body,
+        model: parsed.canonicalId,
+      });
+      for await (const chunk of stream) {
+        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      }
+    } else if (apiKeyClient) {
       // API Key 路径：使用官方 SDK 的流式接口
-      const result = await apiKeyClient.models.generateContentStream(req.body);
+      const result = await apiKeyClient.models.generateContentStream(withApiModelId(req.body));
       for await (const chunk of result) {
         const parts = chunk.candidates?.[0]?.content?.parts ?? [];
         for (const part of parts) {
@@ -92,7 +128,7 @@ router.post('/generateContentStream', async (req, res) => {
         throw new Error('凭证无效');
       }
 
-      const stream = generateContentStreamWithCodeAssist(req.body, clientConfig);
+      const stream = generateContentStreamWithCodeAssist(withApiModelId(req.body), clientConfig);
       for await (const chunk of stream) {
         // chunk 已经是 { text?, thought? } 结构
         res.write(`data: ${JSON.stringify(chunk)}\n\n`);

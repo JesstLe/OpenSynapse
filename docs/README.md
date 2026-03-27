@@ -17,6 +17,7 @@
 | 文档 | 说明 | 适用场景 |
 |------|------|----------|
 | [gemini-like-chat-implementation.md](./features/gemini-like-chat-implementation.md) | Gemini 风格聊天实现方案 | 改进聊天体验 |
+| [multi-provider-models.md](./features/multi-provider-models.md) | 多 Provider 模型接入说明 | 维护模型列表与鉴权策略 |
 
 ### 📋 项目规划
 
