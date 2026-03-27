@@ -9,7 +9,7 @@ import {
   login,
   OAUTH_CONFIG,
   resolveOAuthClientConfig,
-} from './src/lib/oauth.js';
+} from '../src/lib/oauth.js';
 
 dotenv.config({ path: '.env.local' });
 

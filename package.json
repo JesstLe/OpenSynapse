@@ -9,7 +9,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "cli": "tsx scripts/cli.ts",
+    "cli:auth": "tsx scripts/cli-auth.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

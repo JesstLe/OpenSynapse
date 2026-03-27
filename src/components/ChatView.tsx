@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Send, Sparkles, Loader2, BrainCircuit, Image as ImageIcon, X, LayoutDashboard, History, Plus, Trash2, MessageSquare, FileText, FileUp, Link as LinkIcon, ChevronRight, BookOpen, Square, RefreshCw } from 'lucide-react';
+import { Send, Sparkles, Loader2, BrainCircuit, Image as ImageIcon, X, LayoutDashboard, History, Plus, Trash2, MessageSquare, FileText, FileUp, Link as LinkIcon, ChevronRight, BookOpen, Square, RefreshCw, Pencil, Copy, Check, Edit3 } from 'lucide-react';
 import { ChatMessage, Note, Flashcard, ChatSession } from '../types';
 import { chatWithAI, chatWithAIStream, processConversation, BreakthroughConfig, startBreakthroughChat, startBreakthroughChatStream, deconstructDocument, deconstructUrl, deconstructScannedDocument, deconstructTOC, type StreamChunk } from '../services/gemini';
 import { cn } from '../lib/utils';
@@ -75,6 +75,11 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
   const [customRange, setCustomRange] = useState({ start: 1, end: 20 });
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [showThinking, setShowThinking] = useState(true);
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState('');
+  const [editingMessageIdx, setEditingMessageIdx] = useState<number | null>(null);
+  const [editInput, setEditInput] = useState('');
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
@@ -383,10 +388,45 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
 
   const handleProcess = async () => {
     if (messages.length < 2 || isProcessing) return;
-    
-    const chatHistory = messages.map(m => `${m.role === 'user' ? '用户' : 'AI'}: ${m.text}`);
-    const result = await processConversation(chatHistory);
-    onProcess(result.note, result.flashcards);
+    try {
+      const chatHistory = messages.map(m => `${m.role === 'user' ? '用户' : 'AI'}: ${m.text}`);
+      const result = await processConversation(chatHistory);
+      onProcess(result.note, result.flashcards);
+    } catch (error) {
+      console.error('提取资产失败:', error);
+      setMessages(prev => [...prev, {
+        role: 'model',
+        text: `⚠️ 提取资产失败：${getUserFacingAiError(error)}`,
+      }]);
+    }
+  };
+
+  // 复制消息内容
+  const handleCopy = async (text: string, idx: number) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 2000);
+    } catch {
+      // fallback
+    }
+  };
+
+  // 编辑用户消息后重发
+  const handleEditResend = async (idx: number, newText: string) => {
+    setEditingMessageIdx(null);
+    const truncated = messages.slice(0, idx);
+    const editedMsg: ChatMessage = { role: 'user', text: newText };
+    const newMessages = [...truncated, editedMsg];
+    setMessages(newMessages);
+    await handleSendWithMessages(newMessages);
+  };
+
+  // 重命名会话
+  const handleRenameSession = async (session: ChatSession, newTitle: string) => {
+    setRenamingSessionId(null);
+    if (!newTitle.trim() || newTitle.trim() === session.title) return;
+    await onSaveSession({ ...session, title: newTitle.trim() });
   };
 
   const handleModelSelect = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -455,9 +495,37 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                       currentSessionId === session.id ? "text-orange-500" : "text-white/20"
                     )} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{session.title || '无标题会话'}</p>
-                      <p className="text-[10px] text-white/20 uppercase font-bold">{new Date(session.updatedAt).toLocaleDateString()}</p>
+                      {renamingSessionId === session.id ? (
+                        <input
+                          autoFocus
+                          value={renameInput}
+                          onChange={(e) => setRenameInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); handleRenameSession(session, renameInput); }
+                            if (e.key === 'Escape') setRenamingSessionId(null);
+                          }}
+                          onBlur={() => handleRenameSession(session, renameInput)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full bg-white/10 border border-orange-500/50 rounded-lg px-2 py-1 text-sm outline-none"
+                        />
+                      ) : (
+                        <>
+                          <p className="text-sm font-medium truncate">{session.title || '无标题会话'}</p>
+                          <p className="text-[10px] text-white/20 uppercase font-bold">{new Date(session.updatedAt).toLocaleDateString()}</p>
+                        </>
+                      )}
                     </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRenamingSessionId(session.id);
+                        setRenameInput(session.title || '');
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-white/10 text-white/40 rounded-lg transition-all"
+                      title="重命名"
+                    >
+                      <Pencil size={14} />
+                    </button>
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -633,7 +701,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               </details>
             )}
             <div className={cn(
-              "px-4 py-3 rounded-2xl text-sm leading-relaxed",
+              "px-4 py-3 rounded-2xl text-sm leading-relaxed group/msg relative",
               msg.role === 'user' 
                 ? "bg-white/10 text-white rounded-tr-none" 
                 : "bg-[#1A1A1A] text-white/90 border border-white/5 rounded-tl-none"
@@ -643,16 +711,61 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                   <img src={msg.image} alt="User upload" className="max-w-full h-auto" referrerPolicy="no-referrer" />
                 </div>
               )}
-              <div className="markdown-body">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {msg.text || (isLoading && i === messages.length - 1 ? '' : '')}
-                </ReactMarkdown>
-              </div>
+              {/* 用户消息编辑模式 */}
+              {msg.role === 'user' && editingMessageIdx === i ? (
+                <div className="flex flex-col gap-2">
+                  <textarea
+                    autoFocus
+                    value={editInput}
+                    onChange={(e) => setEditInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEditResend(i, editInput); }
+                      if (e.key === 'Escape') setEditingMessageIdx(null);
+                    }}
+                    className="w-full bg-white/5 border border-orange-500/50 rounded-lg px-3 py-2 text-sm outline-none resize-none min-h-[60px]"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setEditingMessageIdx(null)} className="px-3 py-1 text-xs text-white/40 hover:text-white rounded-lg">
+                      取消
+                    </button>
+                    <button onClick={() => handleEditResend(i, editInput)} className="px-3 py-1 text-xs bg-orange-500 text-white rounded-lg hover:bg-orange-600">
+                      重新发送
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="markdown-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.text || (isLoading && i === messages.length - 1 ? '' : '')}
+                  </ReactMarkdown>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold">
                 {msg.role === 'user' ? '你' : '导师'}
               </span>
+              {/* 复制按钮：所有有内容的消息都显示 */}
+              {msg.text && !isLoading && (
+                <button
+                  onClick={() => handleCopy(msg.text, i)}
+                  className="flex items-center gap-1 text-[10px] text-white/20 hover:text-orange-500 transition-colors uppercase tracking-widest font-bold"
+                  title="复制"
+                >
+                  {copiedIdx === i ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                  {copiedIdx === i ? '已复制' : '复制'}
+                </button>
+              )}
+              {/* 用户消息编辑按钮 */}
+              {msg.role === 'user' && !isLoading && editingMessageIdx !== i && (
+                <button
+                  onClick={() => { setEditingMessageIdx(i); setEditInput(msg.text); }}
+                  className="flex items-center gap-1 text-[10px] text-white/20 hover:text-orange-500 transition-colors uppercase tracking-widest font-bold"
+                  title="编辑并重发"
+                >
+                  <Edit3 size={12} /> 编辑
+                </button>
+              )}
               {/* 重新生成按钮：只在最后一条 AI 消息 + 非 loading 状态显示 */}
               {msg.role === 'model' && i === messages.length - 1 && !isLoading && msg.text && (
                 <button

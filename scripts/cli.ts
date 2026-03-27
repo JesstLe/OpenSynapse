@@ -3,13 +3,13 @@ import path from 'node:path';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
 import { handleAuthCommand } from './cli-auth.js';
-import { generateContentWithCodeAssist } from './src/lib/codeAssist.js';
-import { DEFAULT_TEXT_MODEL } from './src/lib/aiModels.js';
+import { generateContentWithCodeAssist } from '../src/lib/codeAssist.js';
+import { DEFAULT_TEXT_MODEL } from '../src/lib/aiModels.js';
 import {
   loadCredentials,
   resolveOAuthClientConfig,
   isCredentialsCompatible,
-} from './src/lib/oauth.js';
+} from '../src/lib/oauth.js';
 
 dotenv.config({ path: '.env.local' });
 
