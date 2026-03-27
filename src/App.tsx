@@ -369,8 +369,8 @@ export default function App() {
   if (!isAuthReady || isLoadingData) {
     return (
       <div className="h-screen bg-[#0A0A0A] flex flex-col items-center justify-center gap-4">
-        <div className="w-16 h-16 rounded-2xl bg-orange-500/10 overflow-hidden flex items-center justify-center animate-pulse border border-orange-500/20">
-          <img src="/logo.png" className="w-12 h-12 object-contain" alt="OpenSynapse Logo" />
+        <div className="w-20 h-20 rounded-2xl bg-white overflow-hidden flex items-center justify-center animate-pulse shadow-[0_0_30px_rgba(255,255,255,0.1)]">
+          <img src="/logo.png" className="w-14 h-14 object-contain" alt="OpenSynapse Logo" />
         </div>
         <p className="text-xs font-bold uppercase tracking-[0.3em] text-white/20">正在同步突触资产...</p>
       </div>
@@ -380,7 +380,7 @@ export default function App() {
   if (!user && !isUsingDevAuthBypass) {
     return (
       <div className="h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-6">
-        <div className="w-24 h-24 rounded-3xl bg-orange-500/10 flex items-center justify-center shadow-[0_0_60px_rgba(249,115,22,0.2)] mb-8 overflow-hidden border border-orange-500/20">
+        <div className="w-28 h-28 rounded-[2rem] bg-white flex items-center justify-center shadow-[0_0_60px_rgba(255,255,255,0.15)] mb-8 overflow-hidden transform hover:scale-110 transition-transform duration-500">
           <img src="/logo.png" className="w-20 h-20 object-contain" alt="OpenSynapse Logo" />
         </div>
         <h1 className="text-4xl font-black tracking-tighter mb-4 text-center">Synapse 突触</h1>
@@ -406,8 +406,8 @@ export default function App() {
           className="p-6 flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
           onClick={() => setActiveView('dashboard')}
         >
-          <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center shadow-[0_0_20px_rgba(249,115,22,0.1)] overflow-hidden border border-orange-500/20">
-            <img src="/logo.png" className="w-8 h-8 object-contain" alt="Logo" />
+          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.1)] overflow-hidden">
+            <img src="/logo.png" className="w-7 h-7 object-contain" alt="Logo" />
           </div>
           <span className="font-bold text-lg tracking-tight">Synapse 突触</span>
         </div>
