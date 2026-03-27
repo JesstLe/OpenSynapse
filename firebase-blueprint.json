@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "Note": {
+      "title": "Note",
+      "description": "A knowledge asset (note) captured from a conversation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "summary": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "relatedIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "title", "content", "userId"]
+    },
+    "Flashcard": {
+      "title": "Flashcard",
+      "description": "An active recall card generated from a note.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "noteId": { "type": "string" },
+        "front": { "type": "string" },
+        "back": { "type": "string" },
+        "difficulty": { "type": "number" },
+        "stability": { "type": "number" },
+        "retrievability": { "type": "number" },
+        "lastReview": { "type": "string", "format": "date-time" },
+        "nextReview": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "noteId", "front", "back", "userId"]
+    },
+    "ChatSession": {
+      "title": "ChatSession",
+      "description": "A historical learning conversation session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "messages": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "role": { "type": "string", "enum": ["user", "model"] },
+              "text": { "type": "string" },
+              "image": { "type": "string" }
+            }
+          } 
+        },
+        "updatedAt": { "type": "number" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "messages", "updatedAt", "userId"]
+    }
+  },
+  "firestore": {
+    "/notes/{noteId}": {
+      "schema": "Note",
+      "description": "User's knowledge assets."
+    },
+    "/flashcards/{cardId}": {
+      "schema": "Flashcard",
+      "description": "User's active recall cards."
+    },
+    "/chat_sessions/{sessionId}": {
+      "schema": "ChatSession",
+      "description": "User's historical chat sessions."
+    }
+  }
+}
