@@ -17,7 +17,9 @@ import {
   History,
   Settings,
   X,
-  LayoutDashboard
+  LayoutDashboard,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { Note, Flashcard, ChatMessage, ChatSession } from './types';
 import { chatWithAI, processConversation, findSemanticLinks, generateEmbedding, BreakthroughConfig, startBreakthroughChat } from './services/gemini';
@@ -134,8 +136,26 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [breakthroughConfig, setBreakthroughConfig] = useState<BreakthroughConfig | null>(null);
   const [noteEditMode, setNoteEditMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme');
+      if (saved) return saved === 'dark';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return true;
+  });
   const isUsingDevAuthBypass = DEV_AUTH_BYPASS_ENABLED && !user;
   const effectiveUserId = user?.uid ?? (isUsingDevAuthBypass ? DEV_USER_ID : null);
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -399,14 +419,32 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-[#0A0A0A] text-white font-sans overflow-hidden">
+    <div 
+      className="flex flex-col md:flex-row h-screen font-sans overflow-hidden transition-colors duration-300"
+      style={{ 
+        backgroundColor: 'var(--bg-primary)', 
+        color: 'var(--text-primary)' 
+      }}
+    >
       {/* Sidebar (Desktop) */}
-      <nav className="hidden md:flex w-64 border-r border-white/10 flex-col bg-[#0F0F0F]">
+      <nav 
+        className="hidden md:flex w-64 flex-col transition-colors duration-300"
+        style={{ 
+          backgroundColor: 'var(--bg-sidebar)',
+          borderRight: '1px solid var(--border-color)'
+        }}
+      >
         <div 
           className="p-6 flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
           onClick={() => setActiveView('dashboard')}
         >
-          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.1)] overflow-hidden">
+          <div 
+            className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden transition-colors duration-300"
+            style={{ 
+              backgroundColor: isDarkMode ? '#ffffff' : '#1a1a2e',
+              boxShadow: '0 0 15px var(--shadow-color)'
+            }}
+          >
             <img src="/logo.png" className="w-7 h-7 object-contain" alt="Logo" />
           </div>
           <span className="font-bold text-lg tracking-tight">Synapse 突触</span>
@@ -418,18 +456,21 @@ export default function App() {
             label="仪表盘" 
             active={activeView === 'dashboard'} 
             onClick={() => setActiveView('dashboard')} 
+            isDarkMode={isDarkMode}
           />
           <NavItem 
             icon={<MessageSquare size={20} />} 
             label="学习对话" 
             active={activeView === 'chat'} 
             onClick={() => setActiveView('chat')} 
+            isDarkMode={isDarkMode}
           />
           <NavItem 
             icon={<Network size={20} />} 
             label="知识图谱" 
             active={activeView === 'graph'} 
             onClick={() => setActiveView('graph')} 
+            isDarkMode={isDarkMode}
           />
           <NavItem 
             icon={<Layers size={20} />} 
@@ -437,30 +478,67 @@ export default function App() {
             active={activeView === 'review'} 
             onClick={() => setActiveView('review')} 
             badge={flashcards.filter(c => c.nextReview <= Date.now()).length}
+            isDarkMode={isDarkMode}
           />
           <NavItem 
             icon={<BookOpen size={20} />} 
             label="知识库" 
             active={activeView === 'notes'} 
             onClick={() => setActiveView('notes')} 
+            isDarkMode={isDarkMode}
           />
         </div>
 
-        <div className="p-4 border-t border-white/5 space-y-2">
-          <div className="px-4 py-2 text-[10px] uppercase tracking-widest text-white/40 font-semibold">
-            {isUsingDevAuthBypass ? '开发模式' : '账户'}
+        <div 
+          className="p-4 space-y-2"
+          style={{ borderTop: '1px solid var(--border-color)' }}
+        >
+          <div className="px-4 py-2 flex items-center justify-between">
+            <span 
+              className="text-[10px] uppercase tracking-widest font-semibold"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              {isUsingDevAuthBypass ? '开发模式' : '账户'}
+            </span>
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-2 rounded-lg transition-all duration-200 hover:scale-110"
+              style={{ 
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-secondary)'
+              }}
+              title={isDarkMode ? '切换到亮色模式' : '切换到暗色模式'}
+            >
+              {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
           </div>
           <div className="px-4 py-2 flex items-center gap-3">
             {user?.photoURL ? (
-              <img src={user.photoURL} className="w-8 h-8 rounded-full border border-white/10" alt={user.displayName || ''} />
+              <img 
+                src={user.photoURL} 
+                className="w-8 h-8 rounded-full" 
+                style={{ border: '1px solid var(--border-color)' }}
+                alt={user.displayName || ''} 
+              />
             ) : (
-              <div className="w-8 h-8 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-xs font-bold text-white/60">
+              <div 
+                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-300"
+                style={{ 
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-muted)'
+                }}
+              >
                 {isUsingDevAuthBypass ? 'DEV' : '?'}
               </div>
             )}
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold truncate">{user?.displayName || '本地开发免登录'}</p>
-              <button onClick={handleLogout} className="text-[10px] text-white/40 hover:text-orange-400 transition-colors">
+              <button 
+                onClick={handleLogout} 
+                className="text-[10px] transition-colors hover:text-[var(--accent-color)]"
+                style={{ color: 'var(--text-muted)' }}
+              >
                 {isUsingDevAuthBypass ? '清空开发态' : '退出登录'}
               </button>
             </div>
