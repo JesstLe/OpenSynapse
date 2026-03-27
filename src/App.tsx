@@ -547,32 +547,43 @@ export default function App() {
       </nav>
 
       {/* Bottom Navigation (Mobile) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0F0F0F] border-t border-white/10 flex items-center justify-around px-2 z-50">
+      <nav 
+        className="md:hidden fixed bottom-0 left-0 right-0 h-16 flex items-center justify-around px-2 z-50 transition-colors duration-300"
+        style={{ 
+          backgroundColor: 'var(--bg-sidebar)',
+          borderTop: '1px solid var(--border-color)'
+        }}
+      >
         <MobileNavItem 
           icon={<LayoutDashboard size={20} />} 
           active={activeView === 'dashboard'} 
           onClick={() => setActiveView('dashboard')} 
+          isDarkMode={isDarkMode}
         />
         <MobileNavItem 
           icon={<MessageSquare size={20} />} 
           active={activeView === 'chat'} 
           onClick={() => setActiveView('chat')} 
+          isDarkMode={isDarkMode}
         />
         <MobileNavItem 
           icon={<Network size={20} />} 
           active={activeView === 'graph'} 
           onClick={() => setActiveView('graph')} 
+          isDarkMode={isDarkMode}
         />
         <MobileNavItem 
           icon={<Layers size={20} />} 
           active={activeView === 'review'} 
           onClick={() => setActiveView('review')} 
           badge={flashcards.filter(c => c.nextReview <= Date.now()).length}
+          isDarkMode={isDarkMode}
         />
         <MobileNavItem 
           icon={<BookOpen size={20} />} 
           active={activeView === 'notes'} 
           onClick={() => setActiveView('notes')} 
+          isDarkMode={isDarkMode}
         />
       </nav>
 
@@ -674,18 +685,26 @@ export default function App() {
   );
 }
 
-function MobileNavItem({ icon, active, onClick, badge }: { icon: React.ReactNode; active: boolean; onClick: () => void; badge?: number }) {
+function MobileNavItem({ icon, active, onClick, badge, isDarkMode }: { icon: React.ReactNode; active: boolean; onClick: () => void; badge?: number; isDarkMode?: boolean }) {
   return (
     <button
       onClick={onClick}
       className={cn(
         "relative p-3 rounded-xl transition-all",
-        active ? "text-orange-500 bg-orange-500/10" : "text-white/40 hover:text-white hover:bg-white/5"
+        active 
+          ? "text-orange-500" 
+          : isDarkMode 
+            ? "text-white/40 hover:text-white" 
+            : "text-gray-400 hover:text-gray-900"
       )}
+      style={active ? { backgroundColor: 'rgba(249, 115, 22, 0.1)' } : {}}
     >
       {icon}
       {badge !== undefined && badge > 0 && (
-        <span className="absolute top-2 right-2 w-4 h-4 bg-orange-500 text-white text-[8px] font-black flex items-center justify-center rounded-full border-2 border-[#0F0F0F]">
+        <span 
+          className="absolute top-2 right-2 w-4 h-4 text-white text-[8px] font-black flex items-center justify-center rounded-full border-2"
+          style={{ backgroundColor: 'var(--accent-color)', borderColor: 'var(--bg-sidebar)' }}
+        >
           {badge > 99 ? '99+' : badge}
         </span>
       )}
@@ -693,12 +712,13 @@ function MobileNavItem({ icon, active, onClick, badge }: { icon: React.ReactNode
   );
 }
 
-function NavItem({ icon, label, active, onClick, badge }: { 
+function NavItem({ icon, label, active, onClick, badge, isDarkMode }: { 
   icon: React.ReactNode; 
   label: string; 
   active: boolean; 
   onClick: () => void;
   badge?: number;
+  isDarkMode?: boolean;
 }) {
   return (
     <button
@@ -706,26 +726,41 @@ function NavItem({ icon, label, active, onClick, badge }: {
       className={cn(
         "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative",
         active 
-          ? "bg-white/10 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]" 
-          : "text-white/50 hover:text-white hover:bg-white/5"
+          ? "shadow-[inset_0_1px_1px_rgba(0,0,0,0.1)]" 
+          : isDarkMode
+            ? "hover:bg-white/5"
+            : "hover:bg-black/5"
       )}
+      style={active 
+        ? { 
+            backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+            color: 'var(--text-primary)'
+          }
+        : { color: 'var(--text-muted)' }
+      }
     >
       <div className={cn(
         "transition-transform duration-200",
-        active ? "scale-110 text-orange-400" : "group-hover:scale-110"
+        active ? "scale-110" : "group-hover:scale-110"
       )}>
-        {icon}
+        <span style={{ color: active ? 'var(--accent-color)' : 'inherit' }}>
+          {icon}
+        </span>
       </div>
       <span className="hidden md:block font-medium text-sm">{label}</span>
       {badge !== undefined && badge > 0 && (
-        <span className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-orange-500 text-[10px] font-bold flex items-center justify-center text-white">
+        <span 
+          className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center text-white"
+          style={{ backgroundColor: 'var(--accent-color)' }}
+        >
           {badge}
         </span>
       )}
       {active && (
         <motion.div 
           layoutId="active-pill"
-          className="absolute left-0 w-1 h-6 bg-orange-500 rounded-r-full"
+          className="absolute left-0 w-1 h-6 rounded-r-full"
+          style={{ backgroundColor: 'var(--accent-color)' }}
         />
       )}
     </button>
