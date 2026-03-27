@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-[#0A0A0A] text-white antialiased;
+  }
+}
+
+@layer utilities {
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .markdown-body {
+    @apply space-y-4;
+  }
+  .markdown-body p {
+    @apply leading-relaxed mb-4;
+  }
+  .markdown-body strong {
+    @apply text-orange-400 font-bold;
+  }
+  .markdown-body ul, .markdown-body ol {
+    @apply pl-6 my-4 space-y-2;
+  }
+  .markdown-body ul {
+    @apply list-disc;
+  }
+  .markdown-body ol {
+    @apply list-decimal;
+  }
+  .markdown-body li {
+    @apply text-white/80;
+  }
+  .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+    @apply font-bold text-white mt-6 mb-2;
+  }
+  .markdown-body h1 { @apply text-2xl; }
+  .markdown-body h2 { @apply text-xl; }
+  .markdown-body h3 { @apply text-lg; }
+  .markdown-body code {
+    @apply bg-white/10 px-1.5 py-0.5 rounded font-mono text-orange-300 text-xs;
+  }
+  .markdown-body pre {
+    @apply bg-black/40 p-4 rounded-xl border border-white/10 overflow-x-auto my-4;
+  }
+  .markdown-body pre code {
+    @apply bg-transparent p-0 text-white/90;
+  }
+  .markdown-body blockquote {
+    @apply border-l-4 border-orange-500/50 pl-4 italic text-white/60 my-4;
+  }
+}
