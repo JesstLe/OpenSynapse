@@ -1,5 +1,6 @@
 import { Type } from "@google/genai";
 import { Note, Flashcard, ChatMessage } from "../types";
+import { EMBEDDING_MODEL, getPreferredTextModel } from "../lib/aiModels";
 
 // Setup an API proxy that mirrors the GoogleGenAI interface but calls our backend API
 const ai = {
@@ -30,6 +31,7 @@ const ai = {
 };
 
 export async function chatWithAI(messages: ChatMessage[], allNotes: Note[]) {
+  const modelId = getPreferredTextModel();
   const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.text || "";
   
   // RAG: Find relevant notes based on the last user message
@@ -58,7 +60,7 @@ export async function chatWithAI(messages: ChatMessage[], allNotes: Note[]) {
   });
 
   const model = ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: modelId,
     contents,
     config: {
       systemInstruction: `# Role Definition
@@ -134,6 +136,7 @@ export async function findRelevantNotes(query: string, notes: Note[], limit: num
 }
 
 export async function processConversation(chatHistory: string[]): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
+  const modelId = getPreferredTextModel();
   const prompt = `你是一位严谨的计算机科学导师。请分析以下对话，提取出核心知识点。
   
   对于每一个知识点，请生成：
@@ -150,7 +153,7 @@ export async function processConversation(chatHistory: string[]): Promise<{ note
   `;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: modelId,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -189,6 +192,7 @@ export async function processConversation(chatHistory: string[]): Promise<{ note
 }
 
 export async function findSemanticLinks(newNote: Note, existingNotes: Note[]): Promise<string[]> {
+  const modelId = getPreferredTextModel();
   if (existingNotes.length === 0) return [];
   
   // If we have embeddings, we can use them for more accurate/efficient linking
@@ -212,7 +216,7 @@ export async function findSemanticLinks(newNote: Note, existingNotes: Note[]): P
   仅返回相关笔记的 ID 数组。`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: modelId,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -227,6 +231,7 @@ export async function findSemanticLinks(newNote: Note, existingNotes: Note[]): P
 }
 
 export async function deconstructScannedDocument(base64Image: string): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
+  const modelId = getPreferredTextModel();
   const prompt = `你是一位顶尖的知识架构师。请分析这张扫描文档或图片的页面内容，并将其“解构”为结构化的知识资产。
   
   请提取出最核心的一个知识点，并生成：
@@ -239,7 +244,7 @@ export async function deconstructScannedDocument(base64Image: string): Promise<{
   `;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: modelId,
     contents: {
       parts: [
         { text: prompt },
@@ -288,6 +293,7 @@ export async function deconstructScannedDocument(base64Image: string): Promise<{
 }
 
 export async function deconstructTOC(text: string): Promise<{ chapters: { title: string, startPage: number, endPage: number, summary: string }[] }> {
+  const modelId = getPreferredTextModel();
   const prompt = `你是一位顶尖的知识架构师。请分析以下教材或文档的前几页内容，提取出其目录结构（Table of Contents）。
   
   请识别出最核心的 5-8 个章节，并为每个章节提供：
@@ -300,7 +306,7 @@ export async function deconstructTOC(text: string): Promise<{ chapters: { title:
   `;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: modelId,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -330,6 +336,7 @@ export async function deconstructTOC(text: string): Promise<{ chapters: { title:
 }
 
 export async function deconstructUrl(url: string): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
+  const modelId = getPreferredTextModel();
   const prompt = `你是一位顶尖的知识架构师。请访问并深度解构以下 URL 的内容：${url}。
   
   请提取出最核心的一个知识点，并生成：
@@ -342,7 +349,7 @@ export async function deconstructUrl(url: string): Promise<{ note: Partial<Note>
   `;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: modelId,
     contents: prompt,
     config: {
       tools: [{ urlContext: {} }],
@@ -383,7 +390,7 @@ export async function deconstructUrl(url: string): Promise<{ note: Partial<Note>
 
 export async function generateEmbedding(text: string): Promise<number[]> {
   const result = await ai.models.embedContent({
-    model: 'gemini-embedding-2-preview',
+    model: EMBEDDING_MODEL,
     contents: [text],
   });
   return result.embeddings[0].values;
@@ -395,6 +402,7 @@ export interface BreakthroughConfig {
 }
 
 export async function analyzeKnowledgeGaps(tag: string, cards: Flashcard[]): Promise<string[]> {
+  const modelId = getPreferredTextModel();
   const prompt = `你是一位教育心理学家和计算机科学专家。
   用户在 [${tag}] 领域的以下知识点上遇到了困难（复习表现不佳）：
   ${cards.map(c => `- Q: ${c.question}\n  A: ${c.answer}`).join('\n')}
@@ -404,7 +412,7 @@ export async function analyzeKnowledgeGaps(tag: string, cards: Flashcard[]): Pro
   返回一个包含 2-3 个具体薄弱点的字符串数组。`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: modelId,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -419,6 +427,7 @@ export async function analyzeKnowledgeGaps(tag: string, cards: Flashcard[]): Pro
 }
 
 export async function startBreakthroughChat(config: BreakthroughConfig, allNotes: Note[]) {
+  const modelId = getPreferredTextModel();
   const relevantNotes = allNotes.filter(n => n.tags.includes(config.tag));
   
   const contextText = relevantNotes.length > 0 
@@ -444,7 +453,7 @@ ${contextText}
 请开始你的第一轮引导，针对 [${config.tag}] 的核心痛点抛出一个启发性的问题。`;
 
   const model = ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: modelId,
     contents: "你好，导师。我准备好开始针对 [" + config.tag + "] 的专项攻坚了。",
     config: {
       systemInstruction,
@@ -455,6 +464,7 @@ ${contextText}
 }
 
 export async function deconstructDocument(text: string): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
+  const modelId = getPreferredTextModel();
   const prompt = `你是一位顶尖的知识架构师。请将以下长文档或文章“解构”为结构化的知识资产。
   
   请提取出最核心的一个知识点，并生成：
@@ -470,7 +480,7 @@ export async function deconstructDocument(text: string): Promise<{ note: Partial
   `;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: modelId,
     contents: prompt,
     config: {
       responseMimeType: "application/json",

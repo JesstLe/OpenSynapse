@@ -4,6 +4,7 @@ import {
   OAUTH_CONFIG,
   getValidCredentials,
 } from './oauth.js';
+import { getFallbackModels } from './aiModels.js';
 
 type GenerateContentParams = {
   model: string;
@@ -175,23 +176,59 @@ export async function generateContentWithCodeAssist(
     throw new Error('当前凭证缺少 Code Assist project，请重新运行 "npx tsx cli.ts auth login"。');
   }
 
-  const response = await fetch(`${OAUTH_CONFIG.CODE_ASSIST_ENDPOINT}/v1internal:generateContent`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${credentials.access_token}`,
-      'Content-Type': 'application/json',
-      'User-Agent': 'google-api-nodejs-client/9.15.1',
-      'X-Goog-Api-Client': 'gl-node/opensynapse-cli',
-    },
-    body: JSON.stringify(toGenerateContentRequest(params, credentials.project_id)),
-  });
+  const headers = {
+    Authorization: `Bearer ${credentials.access_token}`,
+    'Content-Type': 'application/json',
+    'User-Agent': 'google-api-nodejs-client/9.15.1',
+    'X-Goog-Api-Client': 'gl-node/opensynapse-cli',
+  };
+  const candidateModels = [params.model, ...getFallbackModels(params.model)];
 
-  if (!response.ok) {
+  let lastErrorMessage = '';
+  let payload: any = null;
+
+  for (let index = 0; index < candidateModels.length; index += 1) {
+    const modelId = candidateModels[index];
+    const requestBody = {
+      ...toGenerateContentRequest(params, credentials.project_id),
+      model: modelId,
+    };
+
+    const response = await fetch(`${OAUTH_CONFIG.CODE_ASSIST_ENDPOINT}/v1internal:generateContent`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+
+    if (response.ok) {
+      payload = await response.json();
+      break;
+    }
+
     const errorText = await response.text();
-    throw new Error(`Code Assist request failed: ${response.status} ${response.statusText} - ${errorText}`);
+    lastErrorMessage = `Code Assist request failed${index > 0 ? ` after fallback ${modelId}` : ''}: ${response.status} ${response.statusText} - ${errorText}`;
+
+    const isCapacityError =
+      response.status === 429 &&
+      (errorText.includes('MODEL_CAPACITY_EXHAUSTED') ||
+        errorText.includes('No capacity available for model') ||
+        errorText.includes('rateLimitExceeded') ||
+        errorText.includes('RATE_LIMIT_EXCEEDED'));
+    const isNotFound = response.status === 404 || errorText.includes('"status": "NOT_FOUND"');
+    const hasNextFallback = index < candidateModels.length - 1;
+
+    if ((isCapacityError || isNotFound) && hasNextFallback) {
+      console.warn(`[CodeAssist] ${modelId} 当前不可用，自动回退到 ${candidateModels[index + 1]}`);
+      continue;
+    }
+
+    throw new Error(lastErrorMessage);
   }
 
-  const payload = await response.json();
+  if (!payload) {
+    throw new Error(lastErrorMessage || 'Code Assist request failed without response payload.');
+  }
+
   return {
     text: extractResponseText(payload),
     raw: payload,

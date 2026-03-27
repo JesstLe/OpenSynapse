@@ -6,6 +6,7 @@ import { Send, Sparkles, Loader2, BrainCircuit, Image as ImageIcon, X, LayoutDas
 import { ChatMessage, Note, Flashcard, ChatSession } from '../types';
 import { chatWithAI, processConversation, BreakthroughConfig, startBreakthroughChat, deconstructDocument, deconstructUrl, deconstructScannedDocument, deconstructTOC } from '../services/gemini';
 import { cn } from '../lib/utils';
+import { AI_MODEL_OPTIONS, getModelOption, getPreferredTextModel, isKnownTextModel, setPreferredTextModel } from '../lib/aiModels';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Set up PDF.js worker
@@ -24,7 +25,41 @@ interface ChatViewProps {
   onClearBreakthrough?: () => void;
 }
 
+function getUserFacingAiError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const resetMatch = message.match(/reset after (\d+s)/i);
+  const resetHint = resetMatch ? ` 预计 ${resetMatch[1]} 后恢复。` : '';
+
+  if (
+    message.includes('MODEL_CAPACITY_EXHAUSTED') ||
+    message.includes('RATE_LIMIT_EXCEEDED') ||
+    message.includes('rateLimitExceeded') ||
+    message.includes('No capacity available for model')
+  ) {
+    return `当前模型临时拥挤，${resetHint || '请稍后再试。'}你也可以切换到 Gemini 2.5 Pro、Gemini 2.5 Flash-Lite 或其他模型继续。`;
+  }
+
+  if (
+    message.includes('404 Not Found') ||
+    message.includes('"status": "NOT_FOUND"') ||
+    message.includes('Requested entity was not found')
+  ) {
+    return '当前选择的模型在这条 Gemini CLI / Code Assist 链路上不可用。建议切换到 Gemini 3 Flash、Gemini 3.1 Pro、Gemini 2.5 Flash 或 Gemini 2.5 Flash-Lite。';
+  }
+
+  if (message.includes('未找到可用的 AI 凭证') || message.includes('auth login')) {
+    return '当前服务端还没有可用的 AI 凭证。请先完成 Gemini CLI 风格登录，或配置 GEMINI_API_KEY。';
+  }
+
+  return '抱歉，我遇到了错误。请重试。';
+}
+
 export default function ChatView({ notes, chatSessions, onProcess, isProcessing, onBackToDashboard, onSaveSession, onDeleteSession, breakthroughConfig, onClearBreakthrough }: ChatViewProps) {
+  const [selectedModel, setSelectedModel] = useState(() => getPreferredTextModel());
+  const [customModelInput, setCustomModelInput] = useState(() => {
+    const currentModel = getPreferredTextModel();
+    return isKnownTextModel(currentModel) ? '' : currentModel;
+  });
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -42,6 +77,18 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isCustomModel = !isKnownTextModel(selectedModel);
+  const currentModelOption = getModelOption(selectedModel);
+
+  const applyModel = (modelId: string) => {
+    const nextModel = setPreferredTextModel(modelId);
+    setSelectedModel(nextModel);
+    if (isKnownTextModel(nextModel)) {
+      setCustomModelInput('');
+    } else {
+      setCustomModelInput(nextModel);
+    }
+  };
 
   useEffect(() => {
     if (breakthroughConfig) {
@@ -227,11 +274,9 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
   const handleSend = async () => {
     if ((!input.trim() && !selectedImage) || isLoading) return;
 
-    const userMsg: ChatMessage = { 
-      role: 'user', 
-      text: input,
-      image: selectedImage || undefined 
-    };
+    const userMsg: ChatMessage = selectedImage
+      ? { role: 'user', text: input, image: selectedImage }
+      : { role: 'user', text: input };
     
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
@@ -262,7 +307,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
 
     } catch (error) {
       console.error("Chat error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: "抱歉，我遇到了错误。请重试。" }]);
+      setMessages(prev => [...prev, { role: 'model', text: getUserFacingAiError(error) }]);
     } finally {
       setIsLoading(false);
     }
@@ -274,6 +319,22 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
     const chatHistory = messages.map(m => `${m.role === 'user' ? '用户' : 'AI'}: ${m.text}`);
     const result = await processConversation(chatHistory);
     onProcess(result.note, result.flashcards);
+  };
+
+  const handleModelSelect = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = event.target.value;
+    if (nextValue === '__custom__') {
+      const fallback = customModelInput.trim() || selectedModel;
+      applyModel(fallback);
+      return;
+    }
+    applyModel(nextValue);
+  };
+
+  const handleCustomModelSubmit = () => {
+    const nextModel = customModelInput.trim();
+    if (!nextModel) return;
+    applyModel(nextModel);
   };
 
   return (
@@ -359,7 +420,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
 
       <div className="flex flex-col h-full max-w-4xl mx-auto w-full relative">
         {/* Header */}
-        <div className="p-6 border-b border-white/5 flex items-center justify-between bg-[#0A0A0A]/80 backdrop-blur-md sticky top-0 z-10">
+        <div className="p-6 border-b border-white/5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-[#0A0A0A]/80 backdrop-blur-md sticky top-0 z-10">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setShowHistory(true)}
@@ -373,27 +434,75 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               <p className="text-sm text-white/40">通过对话构建你的知识资产。</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onBackToDashboard}
-              className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm bg-white/5 hover:bg-white/10 transition-all"
-            >
-              <LayoutDashboard size={16} />
-              仪表盘
-            </button>
-            <button
-              onClick={handleProcess}
-              disabled={messages.length < 3 || isProcessing}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm transition-all",
-                messages.length < 3 || isProcessing
-                  ? "bg-white/5 text-white/20 cursor-not-allowed"
-                  : "bg-orange-500 hover:bg-orange-600 text-white shadow-[0_0_20px_rgba(249,115,22,0.2)] active:scale-95"
+          <div className="flex flex-col items-stretch gap-3 md:items-end">
+            <div className="flex flex-col gap-2 md:items-end">
+              <div className="flex items-center gap-2 justify-end">
+                <span className="text-[10px] uppercase tracking-[0.22em] text-white/30 font-bold">
+                  模型
+                </span>
+                <select
+                  value={isCustomModel ? '__custom__' : selectedModel}
+                  onChange={handleModelSelect}
+                  className="min-w-[14rem] bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm font-medium text-white outline-none hover:bg-white/10 focus:border-orange-500/40"
+                >
+                  {AI_MODEL_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id} className="bg-[#111111] text-white">
+                      {option.label}
+                    </option>
+                  ))}
+                  <option value="__custom__" className="bg-[#111111] text-white">
+                    自定义模型 ID
+                  </option>
+                </select>
+              </div>
+              <p className="max-w-[20rem] text-left md:text-right text-[11px] leading-relaxed text-white/35">
+                {currentModelOption?.description || `当前使用自定义模型：${selectedModel}`}
+              </p>
+              {isCustomModel && (
+                <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                  <input
+                    value={customModelInput}
+                    onChange={(event) => setCustomModelInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        handleCustomModelSubmit();
+                      }
+                    }}
+                    placeholder="例如 gemini-3.1-pro-preview"
+                    className="w-full md:w-64 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-white/20 outline-none focus:border-orange-500/40"
+                  />
+                  <button
+                    onClick={handleCustomModelSubmit}
+                    className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/15 transition-colors"
+                  >
+                    应用
+                  </button>
+                </div>
               )}
-            >
-              {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {isProcessing ? "处理中..." : "提取资产"}
-            </button>
+            </div>
+            <div className="flex items-center gap-3 justify-end">
+              <button
+                onClick={onBackToDashboard}
+                className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm bg-white/5 hover:bg-white/10 transition-all"
+              >
+                <LayoutDashboard size={16} />
+                仪表盘
+              </button>
+              <button
+                onClick={handleProcess}
+                disabled={messages.length < 3 || isProcessing}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm transition-all",
+                  messages.length < 3 || isProcessing
+                    ? "bg-white/5 text-white/20 cursor-not-allowed"
+                    : "bg-orange-500 hover:bg-orange-600 text-white shadow-[0_0_20px_rgba(249,115,22,0.2)] active:scale-95"
+                )}
+              >
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {isProcessing ? "处理中..." : "提取资产"}
+              </button>
+            </div>
           </div>
         </div>
 

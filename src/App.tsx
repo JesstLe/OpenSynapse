@@ -77,6 +77,20 @@ interface FirestoreErrorInfo {
   }
 }
 
+function sanitizeChatSession(session: ChatSession, userId: string) {
+  return {
+    id: session.id,
+    title: session.title || '新会话',
+    messages: session.messages.map((message) =>
+      message.image
+        ? { role: message.role, text: message.text, image: message.image }
+        : { role: message.role, text: message.text }
+    ),
+    updatedAt: session.updatedAt,
+    userId,
+  };
+}
+
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
@@ -455,10 +469,10 @@ export default function App() {
               onSaveSession={async (session) => {
                 if (!user) return;
                 try {
-                  await setDoc(doc(db, 'chat_sessions', session.id), {
-                    ...session,
-                    userId: user.uid
-                  });
+                  await setDoc(
+                    doc(db, 'chat_sessions', session.id),
+                    sanitizeChatSession(session, user.uid)
+                  );
                 } catch (error) {
                   handleFirestoreError(error, OperationType.WRITE, `chat_sessions/${session.id}`);
                 }
