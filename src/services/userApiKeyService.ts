@@ -1,13 +1,5 @@
-import { auth, db } from '../firebase';
-import {
-  Timestamp,
-  deleteField,
-  doc,
-  getDoc,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
+import { apiKeyRepo } from '../repositories/apiKey.repo';
+import { authClient } from '../auth/client';
 
 type ApiKeyProvider = 'gemini' | 'openai' | 'minimax' | 'zhipu' | 'moonshot';
 const API_KEY_PROVIDERS: ApiKeyProvider[] = ['gemini', 'openai', 'minimax', 'zhipu', 'moonshot'];
@@ -23,46 +15,11 @@ export interface UserApiKeys {
   minimax?: ProviderApiKeyConfig;
   zhipu?: ProviderApiKeyConfig;
   moonshot?: ProviderApiKeyConfig;
-  updatedAt: Timestamp;
 }
 
-interface AccountSecretsDoc {
-  apiKeys?: Partial<Record<ApiKeyProvider, ProviderApiKeyConfig>>;
-  updatedAt?: Timestamp;
-  geminiApiKey?: string;
-  openaiApiKey?: string;
-  openaiBaseUrl?: string;
-  minimaxApiKey?: string;
-  minimaxBaseUrl?: string;
-  zhipuApiKey?: string;
-  zhipuBaseUrl?: string;
-  moonshotApiKey?: string;
-  moonshotBaseUrl?: string;
-}
-
-function ensureAuthenticatedUid(): string {
-  const uid = auth.currentUser?.uid;
-  if (!uid) {
-    throw new Error('请先登录后再管理 API Key。');
-  }
-  return uid;
-}
-
-function mapFirestoreError(error: unknown, fallbackMessage: string): Error {
-  if (typeof error === 'object' && error !== null && 'code' in error) {
-    const code = String((error as { code?: string }).code);
-    if (code === 'permission-denied') {
-      return new Error('没有权限访问 API Key，请确认登录状态或安全规则配置。');
-    }
-    if (code === 'unauthenticated') {
-      return new Error('当前登录状态已失效，请重新登录后重试。');
-    }
-  }
-
-  if (error instanceof Error && error.message) {
-    return new Error(`${fallbackMessage}：${error.message}`);
-  }
-  return new Error(fallbackMessage);
+async function getCurrentUserId(): Promise<string | null> {
+  const { data } = await authClient.getSession();
+  return data?.user?.id || null;
 }
 
 function parseProvider(provider: string): ApiKeyProvider {
@@ -72,61 +29,32 @@ function parseProvider(provider: string): ApiKeyProvider {
   return provider as ApiKeyProvider;
 }
 
-function normalizeApiKeys(data: AccountSecretsDoc): UserApiKeys | null {
-  const nested = data.apiKeys;
-  const normalized: Partial<UserApiKeys> = nested
-    ? {
-        gemini: nested.gemini,
-        openai: nested.openai,
-        minimax: nested.minimax,
-        zhipu: nested.zhipu,
-        moonshot: nested.moonshot,
-      }
-    : {
-        gemini: data.geminiApiKey ? { apiKey: data.geminiApiKey } : undefined,
-        openai: data.openaiApiKey
-          ? { apiKey: data.openaiApiKey, baseUrl: data.openaiBaseUrl }
-          : undefined,
-        minimax: data.minimaxApiKey
-          ? { apiKey: data.minimaxApiKey, baseUrl: data.minimaxBaseUrl }
-          : undefined,
-        zhipu: data.zhipuApiKey
-          ? { apiKey: data.zhipuApiKey, baseUrl: data.zhipuBaseUrl }
-          : undefined,
-        moonshot: data.moonshotApiKey
-          ? { apiKey: data.moonshotApiKey, baseUrl: data.moonshotBaseUrl }
-          : undefined,
-      };
-
-  const hasAnyKey =
-    Boolean(normalized.gemini?.apiKey) ||
-    Boolean(normalized.openai?.apiKey) ||
-    Boolean(normalized.minimax?.apiKey) ||
-    Boolean(normalized.zhipu?.apiKey) ||
-    Boolean(normalized.moonshot?.apiKey);
-
-  if (!hasAnyKey) return null;
-
-  return {
-    ...normalized,
-    updatedAt: data.updatedAt ?? Timestamp.now(),
-  } as UserApiKeys;
-}
-
 export async function getUserApiKeys(): Promise<UserApiKeys | null> {
-  const uid = ensureAuthenticatedUid();
+  const uid = await getCurrentUserId();
+  if (!uid) {
+    return null;
+  }
 
   try {
-    const ref = doc(db, 'account_secrets', uid);
-    const snapshot = await getDoc(ref);
-    if (!snapshot.exists()) {
+    const keys = await apiKeyRepo.findByUser(uid);
+    if (!keys || keys.length === 0) {
       return null;
     }
 
-    const data = snapshot.data() as AccountSecretsDoc;
-    return normalizeApiKeys(data);
+    const result: UserApiKeys = {};
+    for (const key of keys) {
+      const provider = key.provider as ApiKeyProvider;
+      if (API_KEY_PROVIDERS.includes(provider)) {
+        result[provider] = {
+          apiKey: key.key,
+        };
+      }
+    }
+
+    return Object.keys(result).length > 0 ? result : null;
   } catch (error) {
-    throw mapFirestoreError(error, '读取 API Key 失败');
+    console.error('读取 API Key 失败:', error);
+    return null;
   }
 }
 
@@ -135,7 +63,11 @@ export async function saveUserApiKey(
   apiKey: string,
   baseUrl?: string
 ): Promise<void> {
-  const uid = ensureAuthenticatedUid();
+  const uid = await getCurrentUserId();
+  if (!uid) {
+    throw new Error('请先登录后再管理 API Key。');
+  }
+
   const normalizedProvider = parseProvider(provider);
   const trimmedApiKey = apiKey.trim();
 
@@ -143,59 +75,38 @@ export async function saveUserApiKey(
     throw new Error('API Key 不能为空。');
   }
 
-  const payload: ProviderApiKeyConfig = {
-    apiKey: trimmedApiKey,
-    ...(baseUrl?.trim() ? { baseUrl: baseUrl.trim() } : {}),
-  };
-
   try {
-    const ref = doc(db, 'account_secrets', uid);
-    try {
-      await updateDoc(ref, {
-        [`apiKeys.${normalizedProvider}`]: payload,
-        updatedAt: serverTimestamp(),
+    const existing = await apiKeyRepo.findByUserAndProvider(uid, normalizedProvider);
+    if (existing) {
+      await apiKeyRepo.update(uid, normalizedProvider, trimmedApiKey);
+    } else {
+      await apiKeyRepo.create({
+        id: crypto.randomUUID(),
+        userId: uid,
+        provider: normalizedProvider,
+        key: trimmedApiKey,
       });
-    } catch (error) {
-      const code = typeof error === 'object' && error !== null && 'code' in error
-        ? String((error as { code?: string }).code)
-        : '';
-      if (code !== 'not-found') {
-        throw error;
-      }
-
-      await setDoc(
-        ref,
-        {
-          apiKeys: {
-            [normalizedProvider]: payload,
-          },
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
     }
   } catch (error) {
-    throw mapFirestoreError(error, '保存 API Key 失败');
+    throw new Error(`保存 API Key 失败：${error instanceof Error ? error.message : '未知错误'}`);
   }
 }
 
 export async function deleteUserApiKey(provider: string): Promise<void> {
-  const uid = ensureAuthenticatedUid();
+  const uid = await getCurrentUserId();
+  if (!uid) {
+    throw new Error('请先登录后再管理 API Key。');
+  }
+
   const normalizedProvider = parseProvider(provider);
 
   try {
-    const ref = doc(db, 'account_secrets', uid);
-    const snapshot = await getDoc(ref);
-    if (!snapshot.exists()) {
-      return;
+    const existing = await apiKeyRepo.findByUserAndProvider(uid, normalizedProvider);
+    if (existing) {
+      await apiKeyRepo.delete(existing.id);
     }
-
-    await updateDoc(ref, {
-      [`apiKeys.${normalizedProvider}`]: deleteField(),
-      updatedAt: serverTimestamp(),
-    });
   } catch (error) {
-    throw mapFirestoreError(error, '删除 API Key 失败');
+    throw new Error(`删除 API Key 失败：${error instanceof Error ? error.message : '未知错误'}`);
   }
 }
 
@@ -210,33 +121,11 @@ export async function getApiKeyForServer(
   const normalizedProvider = parseProvider(provider);
 
   try {
-    const { getFirestore, getAuth } = await import('../lib/firebaseAdmin');
-
-    await getAuth().getUser(uid);
-
-    const serverDb = getFirestore();
-    const snapshot = await serverDb.collection('account_secrets').doc(uid).get();
-    if (!snapshot.exists) {
-      return null;
-    }
-
-    const data = snapshot.data() as AccountSecretsDoc;
-    if (data.apiKeys?.[normalizedProvider]?.apiKey) {
-      return data.apiKeys[normalizedProvider]?.apiKey ?? null;
-    }
-
-    if (normalizedProvider === 'gemini') return data.geminiApiKey ?? null;
-    if (normalizedProvider === 'openai') return data.openaiApiKey ?? null;
-    if (normalizedProvider === 'minimax') return data.minimaxApiKey ?? null;
-    if (normalizedProvider === 'zhipu') return data.zhipuApiKey ?? null;
-    if (normalizedProvider === 'moonshot') return data.moonshotApiKey ?? null;
-
-    return null;
+    const key = await apiKeyRepo.findByUserAndProvider(uid, normalizedProvider);
+    return key?.key || null;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('There is no user record')) {
-      return null;
-    }
-    throw mapFirestoreError(error, '服务端读取 API Key 失败');
+    console.error('服务端读取 API Key 失败:', error);
+    return null;
   }
 }
 
@@ -251,58 +140,16 @@ export async function getApiKeyConfigForServer(
   const normalizedProvider = parseProvider(provider);
 
   try {
-    const { getFirestore, getAuth } = await import('../lib/firebaseAdmin');
-
-    await getAuth().getUser(uid);
-
-    const serverDb = getFirestore();
-    const snapshot = await serverDb.collection('account_secrets').doc(uid).get();
-    if (!snapshot.exists) {
+    const key = await apiKeyRepo.findByUserAndProvider(uid, normalizedProvider);
+    if (!key) {
       return null;
     }
 
-    const data = snapshot.data() as AccountSecretsDoc;
-    const nestedConfig = data.apiKeys?.[normalizedProvider];
-    if (nestedConfig?.apiKey) {
-      return {
-        apiKey: nestedConfig.apiKey,
-        ...(nestedConfig.baseUrl ? { baseUrl: nestedConfig.baseUrl } : {}),
-      };
-    }
-
-    if (normalizedProvider === 'gemini' && data.geminiApiKey) {
-      return { apiKey: data.geminiApiKey };
-    }
-    if (normalizedProvider === 'openai' && data.openaiApiKey) {
-      return {
-        apiKey: data.openaiApiKey,
-        ...(data.openaiBaseUrl ? { baseUrl: data.openaiBaseUrl } : {}),
-      };
-    }
-    if (normalizedProvider === 'minimax' && data.minimaxApiKey) {
-      return {
-        apiKey: data.minimaxApiKey,
-        ...(data.minimaxBaseUrl ? { baseUrl: data.minimaxBaseUrl } : {}),
-      };
-    }
-    if (normalizedProvider === 'zhipu' && data.zhipuApiKey) {
-      return {
-        apiKey: data.zhipuApiKey,
-        ...(data.zhipuBaseUrl ? { baseUrl: data.zhipuBaseUrl } : {}),
-      };
-    }
-    if (normalizedProvider === 'moonshot' && data.moonshotApiKey) {
-      return {
-        apiKey: data.moonshotApiKey,
-        ...(data.moonshotBaseUrl ? { baseUrl: data.moonshotBaseUrl } : {}),
-      };
-    }
-
-    return null;
+    return {
+      apiKey: key.key,
+    };
   } catch (error) {
-    if (error instanceof Error && error.message.includes('There is no user record')) {
-      return null;
-    }
-    throw mapFirestoreError(error, '服务端读取 API Key 配置失败');
+    console.error('服务端读取 API Key 配置失败:', error);
+    return null;
   }
 }

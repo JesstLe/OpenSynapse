@@ -1,4 +1,3 @@
-import { Type } from "@google/genai";
 import { Note, Flashcard, ChatMessage, Persona } from "../types";
 import {
   getPreferredEmbeddingModel,
@@ -7,7 +6,6 @@ import {
   parseModelSelection,
 } from "../lib/aiModels";
 import { PRESET_PERSONAS, DEFAULT_PERSONA_ID } from "../lib/personas";
-import { auth } from "../firebase";
 import { getUserApiKeys } from "./userApiKeyService";
 
 // ─── 流式 chunk 类型定义 ───
@@ -103,22 +101,7 @@ const ai = {
 };
 
 async function getAiRequestHeaders(): Promise<Record<string, string>> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-  try {
-    const user = auth.currentUser;
-    if (!user) {
-      return headers;
-    }
-    const token = await user.getIdToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-  } catch (error) {
-    console.warn('[AI] Failed to attach Firebase auth token:', error);
-  }
-
-  return headers;
+  return { 'Content-Type': 'application/json' };
 }
 
 async function getAiRequestHeadersForModel(model?: string | null): Promise<Record<string, string>> {
@@ -129,11 +112,6 @@ async function getAiRequestHeadersForModel(model?: string | null): Promise<Recor
   }
 
   try {
-    const user = auth.currentUser;
-    if (!user) {
-      return headers;
-    }
-
     const userApiKeys = await getUserApiKeys();
     const providerConfig = userApiKeys?.[parsed.provider];
     if (!providerConfig?.apiKey) {

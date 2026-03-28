@@ -74,23 +74,9 @@ function withApiModelId(params: any) {
 }
 
 async function getUidFromToken(authHeader: string): Promise<string | null> {
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const idToken = authHeader.slice(7).trim();
-  if (!idToken) {
-    return null;
-  }
-
-  try {
-    const { verifyIdToken } = await import('../lib/firebaseAdmin');
-    const decoded = await verifyIdToken(idToken);
-    return decoded?.uid || null;
-  } catch (error) {
-    console.warn('[AI] Invalid Firebase ID token:', error);
-    return null;
-  }
+  // With better-auth, session is handled via cookies
+  // This function is kept for compatibility but auth is handled by the session middleware
+  return null;
 }
 
 type ResolvedProviderCredentials = {
