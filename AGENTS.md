@@ -1,6 +1,6 @@
 # OpenSynapse (突触) - AGENTS.md
 
-**Updated:** 2026-03-28  
+**Updated:** 2026-03-29  
 **Branch:** main
 
 ## Overview

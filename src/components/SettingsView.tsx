@@ -228,7 +228,19 @@ export default function SettingsView({
   };
 
   const handleOpenAIOAuthLogin = async () => {
-    const popup = window.open('', '_blank', 'noopener,noreferrer');
+    const popup = window.open('about:blank', '_blank', 'popup=yes,width=520,height=720');
+    if (popup) {
+      popup.document.title = 'OpenAI OAuth';
+      popup.document.body.innerHTML = `
+        <div style="min-height:100vh;display:grid;place-items:center;background:#0d0d0d;color:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+          <div style="width:min(24rem,calc(100vw - 2rem));padding:2rem;border-radius:1.5rem;background:#171717;border:1px solid rgba(255,255,255,0.08);text-align:center;box-shadow:0 24px 48px rgba(0,0,0,0.35);">
+            <div style="width:3.5rem;height:3.5rem;margin:0 auto 1rem;border-radius:1rem;display:grid;place-items:center;background:linear-gradient(135deg,#10a37f,#1c7f6a);font-size:1.5rem;font-weight:800;">O</div>
+            <h1 style="margin:0 0 0.75rem;font-size:1.5rem;font-weight:800;">正在打开 OpenAI 授权页</h1>
+            <p style="margin:0;line-height:1.6;color:rgba(255,255,255,0.72);">如果几秒后仍未跳转，请关闭此窗口后重试，或使用设置页里的备用授权链接。</p>
+          </div>
+        </div>
+      `;
+    }
     setIsSaving(true);
     setFeedback(null);
     setError(null);
@@ -243,19 +255,32 @@ export default function SettingsView({
 
       if (payload?.authUrl) {
         if (popup) {
-          popup.location.href = payload.authUrl;
+          popup.location.replace(payload.authUrl);
         } else {
           window.open(payload.authUrl, '_blank', 'noopener,noreferrer');
         }
         setFeedback('OpenAI 授权页已打开。完成浏览器登录后，设置页会自动刷新状态。');
       } else {
         popup?.close();
+        throw new Error('未收到 OpenAI 授权地址，请重试。');
       }
 
       await loadStatus();
     } catch (err) {
-      popup?.close();
-      setError(err instanceof Error ? err.message : String(err));
+      const nextError = err instanceof Error ? err.message : String(err);
+      if (popup && !popup.closed) {
+        popup.document.title = 'OpenAI OAuth 打开失败';
+        popup.document.body.innerHTML = `
+          <div style="min-height:100vh;display:grid;place-items:center;background:#0d0d0d;color:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            <div style="width:min(24rem,calc(100vw - 2rem));padding:2rem;border-radius:1.5rem;background:#171717;border:1px solid rgba(255,255,255,0.08);text-align:center;box-shadow:0 24px 48px rgba(0,0,0,0.35);">
+              <div style="width:3.5rem;height:3.5rem;margin:0 auto 1rem;border-radius:1rem;display:grid;place-items:center;background:linear-gradient(135deg,#ef4444,#b91c1c);font-size:1.5rem;font-weight:800;">!</div>
+              <h1 style="margin:0 0 0.75rem;font-size:1.5rem;font-weight:800;">无法打开 OpenAI 授权页</h1>
+              <p style="margin:0;line-height:1.6;color:rgba(255,255,255,0.72);">${nextError}</p>
+            </div>
+          </div>
+        `;
+      }
+      setError(nextError);
     } finally {
       setIsSaving(false);
     }
