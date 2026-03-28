@@ -96,3 +96,18 @@ export const apiKeys = pgTable('api_keys', {
   key: text('key').notNull(),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+// ============================================
+// Custom Personas - 用户自定义人格
+// ============================================
+export const customPersonas = pgTable('custom_personas', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  name: text('name').notNull(),
+  description: text('description'),
+  systemPrompt: text('system_prompt').notNull(),
+  icon: text('icon'),
+  isHidden: boolean('is_hidden').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
