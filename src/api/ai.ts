@@ -18,6 +18,7 @@ import {
 } from '../lib/oauth.js';
 import { getApiKeyConfigForServer } from '../services/userApiKeyService.server.js';
 import { auth } from '../auth/server.js';
+import { requireAuth } from './auth-middleware.js';
 
 dotenv.config({ path: '.env.local' });
 
@@ -285,7 +286,7 @@ async function generateContent(
   return { text: response.text };
 }
 
-router.post('/generateContent', async (req, res) => {
+router.post('/generateContent', requireAuth(async (req, res, userId) => {
   try {
     const response = await generateContent(req.body, getAuthorizationHeader(req), req);
     res.json(response);
@@ -302,9 +303,9 @@ router.post('/generateContent', async (req, res) => {
 
     res.status(status).json({ error: message, isCapacityError: status === 429 });
   }
-});
+}));
 
-router.post('/generateContentStream', async (req, res) => {
+router.post('/generateContentStream', requireAuth(async (req, res, userId) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -365,9 +366,9 @@ router.post('/generateContentStream', async (req, res) => {
     res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
     res.end();
   }
-});
+}));
 
-router.post('/embedContent', async (req, res) => {
+router.post('/embedContent', requireAuth(async (req, res, userId) => {
   const parsed = parseModelSelection(
     typeof req.body?.model === 'string' && req.body.model.trim()
       ? req.body.model
@@ -404,6 +405,6 @@ router.post('/embedContent', async (req, res) => {
     console.error('[AI] Embed Content Error:', error);
     res.status(500).json({ error: error.message || 'Error generating embedding' });
   }
-});
+}));
 
 export default router;

@@ -16,7 +16,7 @@ function toFrontendTimestamp(date: Date | null | undefined): number | null {
 }
 
 function toDbDate(timestamp: number | undefined): Date | null {
-  return timestamp ? new Date(timestamp) : null;
+  return timestamp !== undefined ? new Date(timestamp) : null;
 }
 
 function mapNoteToFrontend(note: any) {
@@ -68,9 +68,16 @@ router.get("/notes", requireAuth(async (req, res, userId) => {
 
 router.post("/notes", requireAuth(async (req, res, userId) => {
   try {
-    const { createdAt, updatedAt, ...noteData } = req.body;
+    const { title, content, summary, tags, relatedIds, codeSnippet, source, createdAt, updatedAt } = req.body;
     const note = await noteRepo.create({
-      ...noteData,
+      id: crypto.randomUUID(),
+      title,
+      content,
+      summary,
+      tags,
+      relatedIds,
+      codeSnippet,
+      source,
       userId,
       createdAt: toDbDate(createdAt),
       updatedAt: updatedAt ? toDbDate(updatedAt) : new Date(),
@@ -154,12 +161,20 @@ router.get("/flashcards/due", requireAuth(async (req, res, userId) => {
 
 router.post("/flashcards", requireAuth(async (req, res, userId) => {
   try {
-    const { nextReview, repetitions, createdAt, ...cardData } = req.body;
+    const { question, answer, stability, difficulty, elapsedDays, scheduledDays, state, nextReview, repetitions, createdAt, noteId } = req.body;
     const card = await flashcardRepo.create({
-      ...cardData,
+      id: crypto.randomUUID(),
+      question,
+      answer,
+      stability,
+      difficulty,
+      elapsedDays,
+      scheduledDays,
+      state,
+      noteId,
       userId,
-      due: nextReview ? toDbDate(nextReview) : new Date(),
-      reps: repetitions || 0,
+      due: nextReview !== undefined ? toDbDate(nextReview) : new Date(),
+      reps: repetitions !== undefined ? repetitions : 0,
       createdAt: toDbDate(createdAt),
     });
     res.json(mapFlashcardToFrontend(card));
@@ -214,15 +229,17 @@ router.post("/flashcards/:id/review", requireAuth(async (req, res, userId) => {
     if (existing.userId !== userId) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const { stability, difficulty, elapsedDays, scheduledDays, state, nextReview, repetitions } = req.body;
+    // Support both FSRS fields and legacy rating field
+    const { rating, stability, difficulty, elapsedDays, scheduledDays, state, nextReview, repetitions } = req.body;
     const updatePayload: any = {
-      stability,
-      difficulty,
-      elapsedDays,
-      scheduledDays,
-      state,
       lastReview: new Date(),
     };
+    // Only update FSRS fields if provided
+    if (stability !== undefined) updatePayload.stability = stability;
+    if (difficulty !== undefined) updatePayload.difficulty = difficulty;
+    if (elapsedDays !== undefined) updatePayload.elapsedDays = elapsedDays;
+    if (scheduledDays !== undefined) updatePayload.scheduledDays = scheduledDays;
+    if (state !== undefined) updatePayload.state = state;
     if (nextReview !== undefined) updatePayload.due = toDbDate(nextReview);
     if (repetitions !== undefined) updatePayload.reps = repetitions;
     const card = await flashcardRepo.update(req.params.id, updatePayload);
@@ -260,13 +277,14 @@ router.get("/chat-sessions", requireAuth(async (req, res, userId) => {
 
 router.post("/chat-sessions", requireAuth(async (req, res, userId) => {
   try {
-    const { id, messages, userId: _userId, ...sessionData } = req.body;
+    const { id, messages, userId: _userId, title, model, personaId } = req.body;
     const sessionId = id || crypto.randomUUID();
     const session = await chatRepo.session.create({
       id: sessionId,
       userId,
-      title: sessionData.title || '新会话',
-      ...sessionData,
+      title: title || '新会话',
+      model,
+      personaId,
     });
     if (messages && Array.isArray(messages)) {
       for (const msg of messages) {
@@ -296,8 +314,12 @@ router.put("/chat-sessions/:id", requireAuth(async (req, res, userId) => {
     if (existing.userId !== userId) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const { messages, userId: _userId, ...sessionData } = req.body;
-    const session = await chatRepo.session.update(req.params.id, sessionData);
+    const { messages, userId: _userId, title, model, personaId } = req.body;
+    const updatePayload: any = {};
+    if (title !== undefined) updatePayload.title = title;
+    if (model !== undefined) updatePayload.model = model;
+    if (personaId !== undefined) updatePayload.personaId = personaId;
+    const session = await chatRepo.session.update(req.params.id, updatePayload);
     if (messages && Array.isArray(messages)) {
       await chatRepo.message.deleteBySession(req.params.id);
       for (const msg of messages) {
