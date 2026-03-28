@@ -8,6 +8,7 @@ import { personaRepo } from "../repositories/persona.repo";
 import { auth } from "../auth/server";
 import { db } from "../db";
 import { accounts } from "../db/schema";
+import { schedule, Rating } from "../services/fsrs";
 
 const router = Router();
 
@@ -229,19 +230,42 @@ router.post("/flashcards/:id/review", requireAuth(async (req, res, userId) => {
     if (existing.userId !== userId) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    // Support both FSRS fields and legacy rating field
+
     const { rating, stability, difficulty, elapsedDays, scheduledDays, state, nextReview, repetitions } = req.body;
     const updatePayload: any = {
       lastReview: new Date(),
     };
-    // Only update FSRS fields if provided
-    if (stability !== undefined) updatePayload.stability = stability;
-    if (difficulty !== undefined) updatePayload.difficulty = difficulty;
-    if (elapsedDays !== undefined) updatePayload.elapsedDays = elapsedDays;
-    if (scheduledDays !== undefined) updatePayload.scheduledDays = scheduledDays;
-    if (state !== undefined) updatePayload.state = state;
-    if (nextReview !== undefined) updatePayload.due = toDbDate(nextReview);
-    if (repetitions !== undefined) updatePayload.reps = repetitions;
+
+    const fsrsFieldsProvided = stability !== undefined || difficulty !== undefined ||
+                               elapsedDays !== undefined || scheduledDays !== undefined ||
+                               state !== undefined || nextReview !== undefined || repetitions !== undefined;
+
+    if (rating !== undefined && !fsrsFieldsProvided) {
+      const ratingValue = typeof rating === 'number' && rating >= 1 && rating <= 4 ? rating : 3;
+      const currentCard = {
+        ...existing,
+        lastReview: existing.lastReview?.getTime() || 0,
+        nextReview: existing.due?.getTime() || Date.now(),
+        repetitions: existing.reps || 0,
+      };
+      const scheduledCard = schedule(currentCard as any, ratingValue as Rating);
+      updatePayload.stability = scheduledCard.stability;
+      updatePayload.difficulty = scheduledCard.difficulty;
+      updatePayload.state = scheduledCard.state;
+      updatePayload.reps = scheduledCard.repetitions;
+      updatePayload.elapsedDays = Math.floor((Date.now() - scheduledCard.lastReview) / (1000 * 60 * 60 * 24));
+      updatePayload.scheduledDays = Math.max(1, Math.round(scheduledCard.stability));
+      updatePayload.due = new Date(scheduledCard.nextReview);
+    } else {
+      if (stability !== undefined) updatePayload.stability = stability;
+      if (difficulty !== undefined) updatePayload.difficulty = difficulty;
+      if (elapsedDays !== undefined) updatePayload.elapsedDays = elapsedDays;
+      if (scheduledDays !== undefined) updatePayload.scheduledDays = scheduledDays;
+      if (state !== undefined) updatePayload.state = state;
+      if (nextReview !== undefined) updatePayload.due = toDbDate(nextReview);
+      if (repetitions !== undefined) updatePayload.reps = repetitions;
+    }
+
     const card = await flashcardRepo.update(req.params.id, updatePayload);
     res.json(mapFlashcardToFrontend(card));
   } catch (error) {
