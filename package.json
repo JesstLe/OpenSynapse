@@ -11,7 +11,8 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "cli": "tsx scripts/cli.ts",
-    "cli:auth": "tsx scripts/cli-auth.ts"
+    "cli:auth": "tsx scripts/cli-auth.ts",
+    "oc:status": "tsx scripts/cli-opencode.ts status"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
