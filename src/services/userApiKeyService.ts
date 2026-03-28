@@ -12,7 +12,7 @@ import {
 type ApiKeyProvider = 'gemini' | 'openai' | 'minimax' | 'zhipu' | 'moonshot';
 const API_KEY_PROVIDERS: ApiKeyProvider[] = ['gemini', 'openai', 'minimax', 'zhipu', 'moonshot'];
 
-interface ProviderApiKeyConfig {
+export interface ProviderApiKeyConfig {
   apiKey: string;
   baseUrl?: string;
 }
@@ -237,5 +237,72 @@ export async function getApiKeyForServer(
       return null;
     }
     throw mapFirestoreError(error, '服务端读取 API Key 失败');
+  }
+}
+
+export async function getApiKeyConfigForServer(
+  uid: string,
+  provider: string
+): Promise<ProviderApiKeyConfig | null> {
+  if (!uid) {
+    throw new Error('缺少用户身份信息，无法读取 API Key。');
+  }
+
+  const normalizedProvider = parseProvider(provider);
+
+  try {
+    const { getFirestore, getAuth } = await import('../lib/firebaseAdmin');
+
+    await getAuth().getUser(uid);
+
+    const serverDb = getFirestore();
+    const snapshot = await serverDb.collection('account_secrets').doc(uid).get();
+    if (!snapshot.exists) {
+      return null;
+    }
+
+    const data = snapshot.data() as AccountSecretsDoc;
+    const nestedConfig = data.apiKeys?.[normalizedProvider];
+    if (nestedConfig?.apiKey) {
+      return {
+        apiKey: nestedConfig.apiKey,
+        ...(nestedConfig.baseUrl ? { baseUrl: nestedConfig.baseUrl } : {}),
+      };
+    }
+
+    if (normalizedProvider === 'gemini' && data.geminiApiKey) {
+      return { apiKey: data.geminiApiKey };
+    }
+    if (normalizedProvider === 'openai' && data.openaiApiKey) {
+      return {
+        apiKey: data.openaiApiKey,
+        ...(data.openaiBaseUrl ? { baseUrl: data.openaiBaseUrl } : {}),
+      };
+    }
+    if (normalizedProvider === 'minimax' && data.minimaxApiKey) {
+      return {
+        apiKey: data.minimaxApiKey,
+        ...(data.minimaxBaseUrl ? { baseUrl: data.minimaxBaseUrl } : {}),
+      };
+    }
+    if (normalizedProvider === 'zhipu' && data.zhipuApiKey) {
+      return {
+        apiKey: data.zhipuApiKey,
+        ...(data.zhipuBaseUrl ? { baseUrl: data.zhipuBaseUrl } : {}),
+      };
+    }
+    if (normalizedProvider === 'moonshot' && data.moonshotApiKey) {
+      return {
+        apiKey: data.moonshotApiKey,
+        ...(data.moonshotBaseUrl ? { baseUrl: data.moonshotBaseUrl } : {}),
+      };
+    }
+
+    return null;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('There is no user record')) {
+      return null;
+    }
+    throw mapFirestoreError(error, '服务端读取 API Key 配置失败');
   }
 }

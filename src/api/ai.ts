@@ -16,6 +16,7 @@ import {
   loadCredentials,
   resolveOAuthClientConfig,
 } from '../lib/oauth.js';
+import { getApiKeyConfigForServer } from '../services/userApiKeyService.js';
 
 dotenv.config({ path: '.env.local' });
 
@@ -31,15 +32,14 @@ const PROVIDER_ENV_KEY: Record<SupportedProvider, string> = {
   moonshot: 'MOONSHOT_API_KEY',
 };
 
-const PROVIDER_SECRET_FIELD: Record<SupportedProvider, string> = {
-  gemini: 'geminiApiKey',
-  openai: 'openaiApiKey',
-  minimax: 'minimaxApiKey',
-  zhipu: 'zhipuApiKey',
-  moonshot: 'moonshotApiKey',
+const PROVIDER_BASE_URL_ENV_KEY: Partial<Record<SupportedProvider, string>> = {
+  openai: 'OPENAI_BASE_URL',
+  minimax: 'MINIMAX_BASE_URL',
+  zhipu: 'ZHIPU_BASE_URL',
+  moonshot: 'MOONSHOT_BASE_URL',
 };
 
-const providerEnvLocks = new Map<string, Promise<void>>();
+const providerOperationLocks = new Map<SupportedProvider, Promise<void>>();
 const bootGeminiApiKey = normalizeApiKey(process.env.GEMINI_API_KEY);
 
 let apiKeyClient: GoogleGenAI | null = null;
@@ -93,64 +93,123 @@ async function getUidFromToken(authHeader: string): Promise<string | null> {
   }
 }
 
-async function getUserApiKey(uid: string, provider: string): Promise<string | null> {
+type ResolvedProviderCredentials = {
+  apiKey: string | null;
+  baseUrl: string | null;
+};
+
+function getRequestSuppliedCredentials(
+  req: express.Request,
+  provider: SupportedProvider
+): ResolvedProviderCredentials | null {
+  const requestProvider = typeof req.headers['x-opensynapse-provider'] === 'string'
+    ? req.headers['x-opensynapse-provider']
+    : null;
+  if (requestProvider !== provider) {
+    return null;
+  }
+
+  const apiKeyHeader = req.headers['x-opensynapse-provider-api-key'];
+  const baseUrlHeader = req.headers['x-opensynapse-provider-base-url'];
+  const apiKey = typeof apiKeyHeader === 'string' ? normalizeApiKey(apiKeyHeader) : null;
+  const baseUrl = typeof baseUrlHeader === 'string' ? normalizeBaseUrl(baseUrlHeader) : null;
+
+  if (!apiKey) {
+    return null;
+  }
+
+  return { apiKey, baseUrl };
+}
+
+function normalizeBaseUrl(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
+async function getUserProviderCredentials(
+  uid: string,
+  provider: SupportedProvider
+): Promise<ResolvedProviderCredentials | null> {
   if (!uid || !isSupportedProvider(provider)) {
     return null;
   }
 
   try {
-    const { getFirestore } = await import('../lib/firebaseAdmin');
-    const doc = await getFirestore().collection('account_secrets').doc(uid).get();
-    if (!doc.exists) {
+    const config = await getApiKeyConfigForServer(uid, provider);
+    if (!config?.apiKey) {
       return null;
     }
-
-    const data = doc.data() as Record<string, unknown> | undefined;
-    const field = PROVIDER_SECRET_FIELD[provider];
-    const value = data?.[field];
-    return typeof value === 'string' ? normalizeApiKey(value) : null;
+    return {
+      apiKey: normalizeApiKey(config.apiKey),
+      baseUrl: normalizeBaseUrl(config.baseUrl),
+    };
   } catch (error) {
-    console.error('[AI] Failed to load user API key:', error);
+    console.error('[AI] Failed to load user provider credentials:', error);
     return null;
   }
 }
 
-async function resolveApiKeyFromRequest(authHeader: string | undefined, provider: SupportedProvider): Promise<string | null> {
+async function resolveProviderCredentialsFromRequest(
+  req: express.Request,
+  authHeader: string | undefined,
+  provider: SupportedProvider
+): Promise<ResolvedProviderCredentials> {
   const uid = authHeader ? await getUidFromToken(authHeader) : null;
-  const userApiKey = uid ? await getUserApiKey(uid, provider) : null;
-  if (userApiKey) {
-    return userApiKey;
-  }
-  return normalizeApiKey(process.env[PROVIDER_ENV_KEY[provider]]);
+  const userCredentials = uid ? await getUserProviderCredentials(uid, provider) : null;
+  const requestCredentials = getRequestSuppliedCredentials(req, provider);
+
+  return {
+    apiKey: userCredentials?.apiKey
+      ?? requestCredentials?.apiKey
+      ?? normalizeApiKey(process.env[PROVIDER_ENV_KEY[provider]]),
+    baseUrl: userCredentials?.baseUrl
+      ?? requestCredentials?.baseUrl
+      ?? normalizeBaseUrl(
+        PROVIDER_BASE_URL_ENV_KEY[provider]
+          ? process.env[PROVIDER_BASE_URL_ENV_KEY[provider]]
+          : null
+      ),
+  };
 }
 
-async function withProviderApiKey<T>(
+async function withProviderCredentials<T>(
   provider: SupportedProvider,
-  resolvedApiKey: string | null,
+  resolvedCredentials: ResolvedProviderCredentials,
   operation: () => Promise<T>
 ): Promise<T> {
   if (provider === 'gemini') {
     return operation();
   }
 
-  const envVar = PROVIDER_ENV_KEY[provider];
-  const previousLock = providerEnvLocks.get(envVar) ?? Promise.resolve();
+  const previousLock = providerOperationLocks.get(provider) ?? Promise.resolve();
 
   let releaseLock = () => {};
   const currentLock = new Promise<void>((resolve) => {
     releaseLock = resolve;
   });
-  providerEnvLocks.set(envVar, previousLock.then(() => currentLock));
+  providerOperationLocks.set(provider, previousLock.then(() => currentLock));
 
   await previousLock;
 
+  const envVar = PROVIDER_ENV_KEY[provider];
+  const baseUrlEnvVar = PROVIDER_BASE_URL_ENV_KEY[provider];
   const original = process.env[envVar];
+  const originalBaseUrl = baseUrlEnvVar ? process.env[baseUrlEnvVar] : undefined;
   try {
-    if (resolvedApiKey) {
-      process.env[envVar] = resolvedApiKey;
+    if (resolvedCredentials.apiKey) {
+      process.env[envVar] = resolvedCredentials.apiKey;
     } else if (typeof original === 'undefined') {
       delete process.env[envVar];
     }
+
+    if (baseUrlEnvVar) {
+      if (resolvedCredentials.baseUrl) {
+        process.env[baseUrlEnvVar] = resolvedCredentials.baseUrl;
+      } else if (typeof originalBaseUrl === 'undefined') {
+        delete process.env[baseUrlEnvVar];
+      }
+    }
+
     return await operation();
   } finally {
     if (typeof original === 'undefined') {
@@ -158,9 +217,18 @@ async function withProviderApiKey<T>(
     } else {
       process.env[envVar] = original;
     }
+
+    if (baseUrlEnvVar) {
+      if (typeof originalBaseUrl === 'undefined') {
+        delete process.env[baseUrlEnvVar];
+      } else {
+        process.env[baseUrlEnvVar] = originalBaseUrl;
+      }
+    }
+
     releaseLock();
-    if (providerEnvLocks.get(envVar) === currentLock) {
-      providerEnvLocks.delete(envVar);
+    if (providerOperationLocks.get(provider) === currentLock) {
+      providerOperationLocks.delete(provider);
     }
   }
 }
@@ -178,7 +246,15 @@ function getGeminiClient(resolvedGeminiApiKey: string): GoogleGenAI {
   return new GoogleGenAI({ apiKey: resolvedGeminiApiKey });
 }
 
-async function generateContent(params: any, authHeader?: string): Promise<{ text: string }> {
+async function generateContent(
+  params: any,
+  authHeader?: string,
+  req?: express.Request
+): Promise<{ text: string }> {
+  if (!req) {
+    throw new Error('缺少请求上下文，无法解析供应商凭证。');
+  }
+
   const parsed = parseModelSelection(params?.model);
 
   if (parsed.provider !== 'gemini') {
@@ -186,8 +262,8 @@ async function generateContent(params: any, authHeader?: string): Promise<{ text
       throw new Error(`不支持的 provider: ${parsed.provider}`);
     }
 
-    const resolvedApiKey = await resolveApiKeyFromRequest(authHeader, parsed.provider);
-    const response = await withProviderApiKey(parsed.provider, resolvedApiKey, async () => {
+    const resolvedCredentials = await resolveProviderCredentialsFromRequest(req, authHeader, parsed.provider);
+    const response = await withProviderCredentials(parsed.provider, resolvedCredentials, async () => {
       return generateContentWithApiKeyProvider({
         ...params,
         model: parsed.canonicalId,
@@ -197,7 +273,7 @@ async function generateContent(params: any, authHeader?: string): Promise<{ text
   }
 
   const geminiParams = withApiModelId(params);
-  const resolvedGeminiApiKey = await resolveApiKeyFromRequest(authHeader, 'gemini');
+  const resolvedGeminiApiKey = (await resolveProviderCredentialsFromRequest(req, authHeader, 'gemini')).apiKey;
 
   if (resolvedGeminiApiKey) {
     const response = await getGeminiClient(resolvedGeminiApiKey).models.generateContent(geminiParams);
@@ -220,7 +296,7 @@ async function generateContent(params: any, authHeader?: string): Promise<{ text
 
 router.post('/generateContent', async (req, res) => {
   try {
-    const response = await generateContent(req.body, getAuthorizationHeader(req));
+    const response = await generateContent(req.body, getAuthorizationHeader(req), req);
     res.json(response);
   } catch (error: any) {
     console.error('[AI] Generate Content Error:', error);
@@ -252,8 +328,8 @@ router.post('/generateContentStream', async (req, res) => {
         throw new Error(`不支持的 provider: ${parsed.provider}`);
       }
 
-      const resolvedApiKey = await resolveApiKeyFromRequest(authHeader, parsed.provider);
-      await withProviderApiKey(parsed.provider, resolvedApiKey, async () => {
+      const resolvedCredentials = await resolveProviderCredentialsFromRequest(req, authHeader, parsed.provider);
+      await withProviderCredentials(parsed.provider, resolvedCredentials, async () => {
         const stream = generateContentStreamWithApiKeyProvider({
           ...req.body,
           model: parsed.canonicalId,
@@ -263,7 +339,7 @@ router.post('/generateContentStream', async (req, res) => {
         }
       });
     } else {
-      const resolvedGeminiApiKey = await resolveApiKeyFromRequest(authHeader, 'gemini');
+      const resolvedGeminiApiKey = (await resolveProviderCredentialsFromRequest(req, authHeader, 'gemini')).apiKey;
 
       if (resolvedGeminiApiKey) {
         const result = await getGeminiClient(resolvedGeminiApiKey).models.generateContentStream(withApiModelId(req.body));
@@ -316,7 +392,7 @@ router.post('/embedContent', async (req, res) => {
     return;
   }
 
-  const resolvedGeminiApiKey = await resolveApiKeyFromRequest(getAuthorizationHeader(req), 'gemini');
+  const resolvedGeminiApiKey = (await resolveProviderCredentialsFromRequest(req, getAuthorizationHeader(req), 'gemini')).apiKey;
 
   if (!resolvedGeminiApiKey) {
     res.json({

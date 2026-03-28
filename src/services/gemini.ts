@@ -1,8 +1,14 @@
 import { Type } from "@google/genai";
 import { Note, Flashcard, ChatMessage, Persona } from "../types";
-import { getPreferredEmbeddingModel, getPreferredStructuredModel, getPreferredTextModel } from "../lib/aiModels";
+import {
+  getPreferredEmbeddingModel,
+  getPreferredStructuredModel,
+  getPreferredTextModel,
+  parseModelSelection,
+} from "../lib/aiModels";
 import { PRESET_PERSONAS, DEFAULT_PERSONA_ID } from "../lib/personas";
 import { auth } from "../firebase";
+import { getUserApiKeys } from "./userApiKeyService";
 
 // ─── 流式 chunk 类型定义 ───
 
@@ -21,7 +27,7 @@ function isEmbeddingUnsupportedError(error: unknown): boolean {
 const ai = {
   models: {
     generateContent: async (params: any) => {
-      const headers = await getAiRequestHeaders();
+      const headers = await getAiRequestHeadersForModel(params?.model);
       const response = await fetch('/api/ai/generateContent', {
         method: 'POST',
         headers,
@@ -36,7 +42,7 @@ const ai = {
     generateContentStream: async function* (params: any): AsyncGenerator<StreamChunk> {
       const { abortSignal, ...configWithoutSignal } = params.config || {};
       const requestBody = { ...params, config: configWithoutSignal };
-      const headers = await getAiRequestHeaders();
+      const headers = await getAiRequestHeadersForModel(params?.model);
 
       const response = await fetch('/api/ai/generateContentStream', {
         method: 'POST',
@@ -82,7 +88,7 @@ const ai = {
       }
     },
     embedContent: async (params: any) => {
-      const headers = await getAiRequestHeaders();
+      const headers = await getAiRequestHeadersForModel(params?.model);
       const response = await fetch('/api/ai/embedContent', {
         method: 'POST',
         headers,
@@ -110,6 +116,37 @@ async function getAiRequestHeaders(): Promise<Record<string, string>> {
     }
   } catch (error) {
     console.warn('[AI] Failed to attach Firebase auth token:', error);
+  }
+
+  return headers;
+}
+
+async function getAiRequestHeadersForModel(model?: string | null): Promise<Record<string, string>> {
+  const headers = await getAiRequestHeaders();
+  const parsed = parseModelSelection(model);
+  if (parsed.provider === 'gemini') {
+    return headers;
+  }
+
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      return headers;
+    }
+
+    const userApiKeys = await getUserApiKeys();
+    const providerConfig = userApiKeys?.[parsed.provider];
+    if (!providerConfig?.apiKey) {
+      return headers;
+    }
+
+    headers['X-OpenSynapse-Provider'] = parsed.provider;
+    headers['X-OpenSynapse-Provider-Api-Key'] = providerConfig.apiKey;
+    if (providerConfig.baseUrl?.trim()) {
+      headers['X-OpenSynapse-Provider-Base-Url'] = providerConfig.baseUrl.trim();
+    }
+  } catch (error) {
+    console.warn('[AI] Failed to attach user provider credentials:', error);
   }
 
   return headers;
