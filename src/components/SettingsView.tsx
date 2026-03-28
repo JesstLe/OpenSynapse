@@ -664,25 +664,10 @@ export default function SettingsView({
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-3xl border border-border-main bg-card p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center gap-3">
               <ShieldCheck className="w-5 h-5 text-accent" />
               <h3 className="font-bold text-lg">Gemini 登录方式</h3>
             </div>
-            <p className="text-sm text-text-sub leading-relaxed">
-              Gemini 可以直接复用你已经登录的 Gemini CLI / Code Assist OAuth。只有你想改走官方 API key 时，
-              才需要填写 `GEMINI_API_KEY`。
-            </p>
-          </div>
-
-          <div className="rounded-3xl border border-border-main bg-card p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-3">
-              <KeyRound className="w-5 h-5 text-accent" />
-              <h3 className="font-bold text-lg">保存位置</h3>
-            </div>
-            <p className="text-sm text-text-sub leading-relaxed">
-              API key 会保存到项目根目录的 `.env.local`。OpenAI OAuth 凭证会保存在 `~/.opensynapse/openai-auth.json`，
-              同时也能复用已有的 `~/.codex/auth.json`。
-            </p>
           </div>
         </div>
 
@@ -708,14 +693,6 @@ export default function SettingsView({
                     复用 ~/.codex/auth.json
                   </span>
                 )}
-              </div>
-              <p className="text-sm text-text-sub leading-relaxed">
-                参考 opencode / OpenAI Codex CLI 的认证方式，使用 ChatGPT / Codex 订阅登录后，
-                通过 `chatgpt.com/backend-api/codex/responses` 访问支持的 GPT / Codex 模型。
-              </p>
-              <div className="text-xs text-text-muted">
-                适合 OAuth 的典型模型：<code>openai/gpt-5.2</code>、<code>openai/gpt-5.2-codex</code>、
-                <code>openai/gpt-5.1</code>、<code>openai/gpt-5.1-codex</code>。
               </div>
               {openAIOAuthStatus?.email && (
                 <div className="text-xs text-text-muted">
