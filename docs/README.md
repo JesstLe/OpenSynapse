@@ -11,6 +11,25 @@
 | [OAUTH_USAGE.md](./auth/OAUTH_USAGE.md) | OAuth 2.0 使用指南 | 需要使用浏览器 OAuth 登录 |
 | [gemini-cli-auth-reference.md](./auth/gemini-cli-auth-reference.md) | OpenClaw OAuth 实现参考 | 想了解 OAuth 实现细节 |
 | [gemini-cli-code-assist-auth-tutorial.md](./auth/gemini-cli-code-assist-auth-tutorial.md) | Gemini CLI / Code Assist 认证教程 | 配置 Gemini CLI 风格认证 |
+| [qq-wechat-firebase-sync-design.md](./auth/qq-wechat-firebase-sync-design.md) | QQ / 微信登录与 Firebase 云同步设计 | 规划第三方登录与账号绑定 |
+
+### 🚀 部署相关 (docs/deployment/)
+
+| 文档 | 说明 | 适用场景 |
+|------|------|----------|
+| [cloud-server-deployment.md](./deployment/cloud-server-deployment.md) | 云服务器完整部署手册 | 首次上线、生产部署、更新与回滚 |
+
+### 🛡️ 安全相关 (docs/security/)
+
+| 文档 | 说明 | 适用场景 |
+|------|------|----------|
+| [llm-security-risk-design.md](./security/llm-security-risk-design.md) | LLM 风险与安全设计 | 防提示词注入、角色保护、RAG 安全、凭证与审计 |
+
+### 💰 商业化相关 (docs/business/)
+
+| 文档 | 说明 | 适用场景 |
+|------|------|----------|
+| [monetization-billing-architecture.md](./business/monetization-billing-architecture.md) | 商业化付费与账单架构设计 | 自用 / 商用共存、BYOK、平台托管额度、利润模型 |
 
 ### ✨ 功能实现 (docs/features/)
 
@@ -42,7 +61,14 @@ OpenSynapse/
 │   ├── auth/                # 🔐 认证文档
 │   │   ├── OAUTH_USAGE.md
 │   │   ├── gemini-cli-auth-reference.md
-│   │   └── gemini-cli-code-assist-auth-tutorial.md
+│   │   ├── gemini-cli-code-assist-auth-tutorial.md
+│   │   └── qq-wechat-firebase-sync-design.md
+│   ├── deployment/          # 🚀 部署文档
+│   │   └── cloud-server-deployment.md
+│   ├── security/            # 🛡️ 安全文档
+│   │   └── llm-security-risk-design.md
+│   ├── business/            # 💰 商业化文档
+│   │   └── monetization-billing-architecture.md
 │   └── features/            # ✨ 功能文档
 │       └── gemini-like-chat-implementation.md
 │

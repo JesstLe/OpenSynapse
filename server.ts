@@ -5,6 +5,8 @@ import fs from "fs/promises";
 import dotenv from "dotenv";
 import { Note, Flashcard } from "./src/types";
 import aiRouter from './src/api/ai';
+import authRouter from './src/api/auth';
+import { initializeFirebaseAdmin } from './src/lib/firebaseAdmin';
 import {
   clearOpenAICodexCredentials,
   createOpenAICodexAuthorizationFlow,
@@ -232,8 +234,12 @@ async function startServer() {
   process.once('SIGINT', closeOpenAIOAuthCallbackServer);
   process.once('SIGTERM', closeOpenAIOAuthCallbackServer);
 
+  // Initialize Firebase Admin for custom token generation
+  initializeFirebaseAdmin();
+
   // API Routes
   app.use('/api/ai', aiRouter);
+  app.use('/auth', authRouter);
 
   app.get("/api/data", async (req, res) => {
     const data = await getData();

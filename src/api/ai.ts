@@ -8,7 +8,6 @@ import {
 } from '../lib/providerGateway.js';
 import {
   getApiModelId,
-  getProviderForModel,
   parseModelSelection,
 } from '../lib/aiModels.js';
 import {
@@ -20,14 +19,50 @@ import {
 dotenv.config({ path: '.env.local' });
 
 const router = express.Router();
-const apiKey = process.env.GEMINI_API_KEY?.trim();
+
+type SupportedProvider = 'gemini' | 'openai' | 'minimax' | 'zhipu' | 'moonshot';
+
+const PROVIDER_ENV_KEY: Record<SupportedProvider, string> = {
+  gemini: 'GEMINI_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  minimax: 'MINIMAX_API_KEY',
+  zhipu: 'ZHIPU_API_KEY',
+  moonshot: 'MOONSHOT_API_KEY',
+};
+
+const PROVIDER_SECRET_FIELD: Record<SupportedProvider, string> = {
+  gemini: 'geminiApiKey',
+  openai: 'openaiApiKey',
+  minimax: 'minimaxApiKey',
+  zhipu: 'zhipuApiKey',
+  moonshot: 'moonshotApiKey',
+};
+
+const providerEnvLocks = new Map<string, Promise<void>>();
+const bootGeminiApiKey = normalizeApiKey(process.env.GEMINI_API_KEY);
 
 let apiKeyClient: GoogleGenAI | null = null;
-if (apiKey && apiKey !== 'AIzaSy...') {
+if (bootGeminiApiKey) {
   console.log('[Server] Initializing Gemini AI with API Key.');
-  apiKeyClient = new GoogleGenAI({ apiKey });
+  apiKeyClient = new GoogleGenAI({ apiKey: bootGeminiApiKey });
 } else {
   console.log('[Server] No valid GEMINI_API_KEY found. AI routes will prefer Code Assist OAuth.');
+}
+
+function normalizeApiKey(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed === 'AIzaSy...') {
+    return null;
+  }
+  return trimmed;
+}
+
+function isSupportedProvider(provider: string): provider is SupportedProvider {
+  return provider === 'gemini'
+    || provider === 'openai'
+    || provider === 'minimax'
+    || provider === 'zhipu'
+    || provider === 'moonshot';
 }
 
 function withApiModelId(params: any) {
@@ -37,22 +72,134 @@ function withApiModelId(params: any) {
   };
 }
 
-// ─── 非流式路由（用于 JSON 结构化输出等场景） ───
+async function getUidFromToken(authHeader: string): Promise<string | null> {
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
 
-async function generateContent(params: any): Promise<{ text: string }> {
+  const idToken = authHeader.slice(7).trim();
+  if (!idToken) {
+    return null;
+  }
+
+  try {
+    const { verifyIdToken } = await import('../lib/firebaseAdmin');
+    const decoded = await verifyIdToken(idToken);
+    return decoded?.uid || null;
+  } catch (error) {
+    console.warn('[AI] Invalid Firebase ID token:', error);
+    return null;
+  }
+}
+
+async function getUserApiKey(uid: string, provider: string): Promise<string | null> {
+  if (!uid || !isSupportedProvider(provider)) {
+    return null;
+  }
+
+  try {
+    const { getFirestore } = await import('../lib/firebaseAdmin');
+    const doc = await getFirestore().collection('account_secrets').doc(uid).get();
+    if (!doc.exists) {
+      return null;
+    }
+
+    const data = doc.data() as Record<string, unknown> | undefined;
+    const field = PROVIDER_SECRET_FIELD[provider];
+    const value = data?.[field];
+    return typeof value === 'string' ? normalizeApiKey(value) : null;
+  } catch (error) {
+    console.error('[AI] Failed to load user API key:', error);
+    return null;
+  }
+}
+
+async function resolveApiKeyFromRequest(authHeader: string | undefined, provider: SupportedProvider): Promise<string | null> {
+  const uid = authHeader ? await getUidFromToken(authHeader) : null;
+  const userApiKey = uid ? await getUserApiKey(uid, provider) : null;
+  if (userApiKey) {
+    return userApiKey;
+  }
+  return normalizeApiKey(process.env[PROVIDER_ENV_KEY[provider]]);
+}
+
+async function withProviderApiKey<T>(
+  provider: SupportedProvider,
+  resolvedApiKey: string | null,
+  operation: () => Promise<T>
+): Promise<T> {
+  if (provider === 'gemini') {
+    return operation();
+  }
+
+  const envVar = PROVIDER_ENV_KEY[provider];
+  const previousLock = providerEnvLocks.get(envVar) ?? Promise.resolve();
+
+  let releaseLock = () => {};
+  const currentLock = new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  });
+  providerEnvLocks.set(envVar, previousLock.then(() => currentLock));
+
+  await previousLock;
+
+  const original = process.env[envVar];
+  try {
+    if (resolvedApiKey) {
+      process.env[envVar] = resolvedApiKey;
+    } else if (typeof original === 'undefined') {
+      delete process.env[envVar];
+    }
+    return await operation();
+  } finally {
+    if (typeof original === 'undefined') {
+      delete process.env[envVar];
+    } else {
+      process.env[envVar] = original;
+    }
+    releaseLock();
+    if (providerEnvLocks.get(envVar) === currentLock) {
+      providerEnvLocks.delete(envVar);
+    }
+  }
+}
+
+function getAuthorizationHeader(req: express.Request): string | undefined {
+  return typeof req.headers.authorization === 'string'
+    ? req.headers.authorization
+    : undefined;
+}
+
+function getGeminiClient(resolvedGeminiApiKey: string): GoogleGenAI {
+  if (apiKeyClient && bootGeminiApiKey === resolvedGeminiApiKey) {
+    return apiKeyClient;
+  }
+  return new GoogleGenAI({ apiKey: resolvedGeminiApiKey });
+}
+
+async function generateContent(params: any, authHeader?: string): Promise<{ text: string }> {
   const parsed = parseModelSelection(params?.model);
+
   if (parsed.provider !== 'gemini') {
-    const response = await generateContentWithApiKeyProvider({
-      ...params,
-      model: parsed.canonicalId,
+    if (!isSupportedProvider(parsed.provider)) {
+      throw new Error(`不支持的 provider: ${parsed.provider}`);
+    }
+
+    const resolvedApiKey = await resolveApiKeyFromRequest(authHeader, parsed.provider);
+    const response = await withProviderApiKey(parsed.provider, resolvedApiKey, async () => {
+      return generateContentWithApiKeyProvider({
+        ...params,
+        model: parsed.canonicalId,
+      });
     });
     return { text: response.text };
   }
 
   const geminiParams = withApiModelId(params);
+  const resolvedGeminiApiKey = await resolveApiKeyFromRequest(authHeader, 'gemini');
 
-  if (apiKeyClient) {
-    const response = await apiKeyClient.models.generateContent(geminiParams);
+  if (resolvedGeminiApiKey) {
+    const response = await getGeminiClient(resolvedGeminiApiKey).models.generateContent(geminiParams);
     return { text: response.text };
   }
 
@@ -72,7 +219,7 @@ async function generateContent(params: any): Promise<{ text: string }> {
 
 router.post('/generateContent', async (req, res) => {
   try {
-    const response = await generateContent(req.body);
+    const response = await generateContent(req.body, getAuthorizationHeader(req));
     res.json(response);
   } catch (error: any) {
     console.error('[AI] Generate Content Error:', error);
@@ -89,73 +236,81 @@ router.post('/generateContent', async (req, res) => {
   }
 });
 
-// ─── 流式路由（SSE 格式，传递 text/thought/error 结构化 chunk） ───
-
 router.post('/generateContentStream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // 防止反向代理缓冲 SSE
+  res.setHeader('X-Accel-Buffering', 'no');
 
   try {
+    const authHeader = getAuthorizationHeader(req);
     const parsed = parseModelSelection(req.body?.model);
+
     if (parsed.provider !== 'gemini') {
-      const stream = generateContentStreamWithApiKeyProvider({
-        ...req.body,
-        model: parsed.canonicalId,
-      });
-      for await (const chunk of stream) {
-        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-      }
-    } else if (apiKeyClient) {
-      // API Key 路径：使用官方 SDK 的流式接口
-      const result = await apiKeyClient.models.generateContentStream(withApiModelId(req.body));
-      for await (const chunk of result) {
-        const parts = chunk.candidates?.[0]?.content?.parts ?? [];
-        for (const part of parts) {
-          if ((part as any).thought && part.text) {
-            res.write(`data: ${JSON.stringify({ thought: part.text })}\n\n`);
-          } else if (part.text) {
-            res.write(`data: ${JSON.stringify({ text: part.text })}\n\n`);
-          }
-        }
-      }
-    } else {
-      // Code Assist OAuth 路径：使用自研流式接口
-      const credentials = await loadCredentials();
-      const clientConfig = resolveOAuthClientConfig();
-      if (!credentials || !isCredentialsCompatible(credentials, clientConfig.clientId)) {
-        throw new Error('凭证无效');
+      if (!isSupportedProvider(parsed.provider)) {
+        throw new Error(`不支持的 provider: ${parsed.provider}`);
       }
 
-      const stream = generateContentStreamWithCodeAssist(withApiModelId(req.body), clientConfig);
-      for await (const chunk of stream) {
-        // chunk 已经是 { text?, thought? } 结构
-        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      const resolvedApiKey = await resolveApiKeyFromRequest(authHeader, parsed.provider);
+      await withProviderApiKey(parsed.provider, resolvedApiKey, async () => {
+        const stream = generateContentStreamWithApiKeyProvider({
+          ...req.body,
+          model: parsed.canonicalId,
+        });
+        for await (const chunk of stream) {
+          res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        }
+      });
+    } else {
+      const resolvedGeminiApiKey = await resolveApiKeyFromRequest(authHeader, 'gemini');
+
+      if (resolvedGeminiApiKey) {
+        const result = await getGeminiClient(resolvedGeminiApiKey).models.generateContentStream(withApiModelId(req.body));
+        for await (const chunk of result) {
+          const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+          for (const part of parts) {
+            if ((part as any).thought && part.text) {
+              res.write(`data: ${JSON.stringify({ thought: part.text })}\n\n`);
+            } else if (part.text) {
+              res.write(`data: ${JSON.stringify({ text: part.text })}\n\n`);
+            }
+          }
+        }
+      } else {
+        const credentials = await loadCredentials();
+        const clientConfig = resolveOAuthClientConfig();
+        if (!credentials || !isCredentialsCompatible(credentials, clientConfig.clientId)) {
+          throw new Error('凭证无效');
+        }
+
+        const stream = generateContentStreamWithCodeAssist(withApiModelId(req.body), clientConfig);
+        for await (const chunk of stream) {
+          res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        }
       }
     }
+
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (error: any) {
     console.error('[AI] Stream Error:', error);
-    // 在 SSE 流中传递错误事件
     res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
     res.end();
   }
 });
 
-// ─── Embedding 路由 ───
-
 router.post('/embedContent', async (req, res) => {
-  if (!apiKeyClient) {
+  const resolvedGeminiApiKey = await resolveApiKeyFromRequest(getAuthorizationHeader(req), 'gemini');
+
+  if (!resolvedGeminiApiKey) {
     res.status(501).json({
-      error: '当前服务端未配置 GEMINI_API_KEY，embedding 仅支持 API Key 路径。',
+      error: '当前服务端未配置可用的 Gemini API Key，embedding 仅支持 API Key 路径。',
     });
     return;
   }
 
   try {
-    const response = await apiKeyClient.models.embedContent(req.body);
+    const response = await getGeminiClient(resolvedGeminiApiKey).models.embedContent(req.body);
     res.json(response);
   } catch (error: any) {
     console.error('[AI] Embed Content Error:', error);

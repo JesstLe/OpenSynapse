@@ -166,7 +166,109 @@ OAuth 本地回调地址：
 
 ---
 
-## Auth Notes
+## Auth System
+
+### Multi-Provider Authentication
+
+OpenSynapse now supports three login providers with complete data isolation:
+
+- **Google** - Firebase Auth (existing)
+- **WeChat** - OAuth 2.0 via WeChat Open Platform (new)
+- **QQ** - OAuth 2.0 via QQ Connect (new)
+
+### Architecture
+
+```
+User clicks login → Frontend redirects to provider OAuth
+                           ↓
+                Provider callback to /auth/{provider}/callback
+                           ↓
+           Server exchanges code for access_token + openid
+                           ↓
+           Find or create user in Firestore (by providerUserId)
+                           ↓
+           Generate Firebase Custom Token
+                           ↓
+           Redirect to /auth/complete?token=...
+                           ↓
+           Frontend calls signInWithCustomToken(auth, token)
+                           ↓
+           User is now authenticated with Firebase
+```
+
+### Data Isolation
+
+Each user has completely independent data:
+
+- **Firestore collections per user:**
+  - `users/{uid}` - User profile
+  - `account_secrets/{uid}` - API keys and credentials
+  - `notes/{id}` (with userId field) - Personal notes
+  - `flashcards/{id}` (with userId field) - Personal flashcards
+  - `chat_sessions/{id}` (with userId field) - Personal chat sessions
+  - `custom_personas/{id}` (with userId field) - Personal personas
+
+- **Account binding:** One Firebase user can bind multiple login methods
+  - Primary key is always Firebase UID
+  - `connected_accounts` collection maps provider IDs to Firebase UID
+
+### Key Files
+
+| Component | File | Description |
+|-----------|------|-------------|
+| Login UI | `src/components/auth/LoginSelection.tsx` | Multi-provider login selection |
+| OAuth Callback | `src/components/auth/AuthCallback.tsx` | Handle Firebase custom token |
+| Auth Routes | `src/api/auth.ts` | WeChat/QQ OAuth endpoints |
+| User Service | `src/lib/userService.ts` | User management, account linking |
+| Firebase Admin | `src/lib/firebaseAdmin.ts` | Custom token generation |
+| Account Binding | SettingsView section | Manage connected accounts |
+
+### Environment Variables
+
+```bash
+# WeChat Open Platform
+WECHAT_APP_ID=your_wechat_app_id
+WECHAT_APP_SECRET=your_wechat_app_secret
+
+# QQ Connect
+QQ_APP_ID=your_qq_app_id
+QQ_APP_SECRET=your_qq_app_secret
+
+# Firebase Admin (for custom tokens)
+# Option 1: Service account JSON
+FIREBASE_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
+# Option 2: Use application default credentials in GCP
+```
+
+---
+
+## User-Level API Keys
+
+For commercial multi-tenant use, API keys are now stored per-user instead of globally.
+
+### Storage
+
+- **Location:** Firestore `account_secrets/{uid}`
+- **Structure:** `{ geminiApiKey?, openaiApiKey?, minimaxApiKey?, ... }`
+- **Security:** Firestore rules restrict read/write to authenticated owner only
+
+### Priority
+
+1. User's personal API key (from Firestore)
+2. Global environment variable (fallback)
+3. OAuth token (for Gemini, if no API key)
+
+### Key Files
+
+| Component | File | Description |
+|-----------|------|-------------|
+| API Key Service | `src/services/userApiKeyService.ts` | CRUD operations for user keys |
+| Settings UI | `src/components/SettingsView.tsx` | Personal API key configuration |
+| Server Routes | `src/api/ai.ts` | Reads user key with env fallback |
+
+---
+
+## Legacy Auth Notes
 
 当前认证主路径是：
 

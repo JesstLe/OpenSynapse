@@ -34,6 +34,8 @@ import ReviewView from './components/ReviewView';
 import NotesView from './components/NotesView';
 import DashboardView from './components/DashboardView';
 import SettingsView from './components/SettingsView';
+import LoginSelection from './components/auth/LoginSelection';
+import AuthCallback from './components/auth/AuthCallback';
 
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import { 
@@ -51,6 +53,7 @@ import {
 } from 'firebase/firestore';
 
 type View = 'chat' | 'graph' | 'review' | 'notes' | 'dashboard' | 'settings';
+type AuthFlowView = 'callback' | 'login' | 'main';
 
 enum OperationType {
   CREATE = 'create',
@@ -144,6 +147,11 @@ export default function App() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [pathname, setPathname] = useState(() => {
+    if (typeof window === 'undefined') return '/';
+    return window.location.pathname;
+  });
+  const [authFlowView, setAuthFlowView] = useState<AuthFlowView>('login');
   const [breakthroughConfig, setBreakthroughConfig] = useState<BreakthroughConfig | null>(null);
   const [noteEditMode, setNoteEditMode] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -156,6 +164,7 @@ export default function App() {
   });
   const isUsingDevAuthBypass = DEV_AUTH_BYPASS_ENABLED && !user;
   const effectiveUserId = user?.uid ?? (isUsingDevAuthBypass ? DEV_USER_ID : null);
+  const isAuthCallbackRoute = pathname === '/auth/complete';
 
   const [showHiddenPersonas, setShowHiddenPersonas] = useState(() => {
     return localStorage.getItem('os_show_hidden_personas') === 'true';
@@ -179,6 +188,27 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handlePathChange = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', handlePathChange);
+    return () => window.removeEventListener('popstate', handlePathChange);
+  }, []);
+
+  useEffect(() => {
+    if (isAuthCallbackRoute) {
+      setAuthFlowView('callback');
+      return;
+    }
+
+    if (user || isUsingDevAuthBypass) {
+      setAuthFlowView('main');
+      return;
+    }
+
+    setAuthFlowView('login');
+  }, [isAuthCallbackRoute, user, isUsingDevAuthBypass]);
 
   useEffect(() => {
     if (!isAuthReady) {
@@ -248,6 +278,34 @@ export default function App() {
     } catch (error) {
       console.error("Login failed:", error);
     }
+  };
+
+  const handleWeChatLogin = async () => {
+    try {
+      const response = await fetch('/auth/wechat/start');
+      const { authUrl } = await response.json();
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error('WeChat login failed:', error);
+    }
+  };
+
+  const handleQQLogin = async () => {
+    try {
+      const response = await fetch('/auth/qq/start');
+      const { authUrl } = await response.json();
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error('QQ login failed:', error);
+    }
+  };
+
+  const handleAuthCallbackComplete = () => {
+    if (typeof window === 'undefined') return;
+    if (window.location.pathname === '/auth/complete') {
+      window.history.replaceState({}, '', '/');
+    }
+    setPathname(window.location.pathname);
   };
 
   const handleLogout = async () => {
@@ -401,6 +459,10 @@ export default function App() {
     setActiveView('notes');
   };
 
+  if (authFlowView === 'callback') {
+    return <AuthCallback onSuccess={handleAuthCallbackComplete} />;
+  }
+
   if (!isAuthReady || isLoadingData) {
     return (
       <div className="h-screen bg-primary flex flex-col items-center justify-center gap-6">
@@ -416,25 +478,12 @@ export default function App() {
     );
   }
 
-  if (!user && !isUsingDevAuthBypass) {
+  if (authFlowView === 'login') {
     return (
-      <div className="h-screen bg-primary flex flex-col items-center justify-center p-6 text-text-main">
-        <div className="w-32 h-32 rounded-[2.5rem] bg-secondary flex items-center justify-center shadow-2xl mb-10 overflow-hidden transform hover:scale-110 transition-transform duration-500 border border-border-main relative group">
-          <div className="absolute inset-0 bg-gradient-to-br from-accent/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <img src="/logo.png" className="w-24 h-24 object-contain relative z-10" alt="OpenSynapse Logo" />
-        </div>
-        <h1 className="text-5xl font-black tracking-tighter mb-4 text-center bg-gradient-to-br from-text-main to-text-main/60 bg-clip-text text-transparent">Synapse 突触</h1>
-        <p className="text-text-sub text-center max-w-sm mb-12 leading-relaxed opacity-60 font-medium">
-          通过 AI 驱动的知识捕获与算法化复习，构建你的神经网络。
-        </p>
-        <button
-          onClick={handleLogin}
-          className="px-8 py-4 bg-accent text-white rounded-2xl font-bold flex items-center gap-3 hover:bg-accent-hover transition-all active:scale-95 shadow-xl shadow-accent/20 hover:shadow-accent/40"
-        >
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5 bg-white rounded-sm p-0.5" alt="Google" />
-          使用 Google 账号登录
-        </button>
-      </div>
+      <LoginSelection
+        onGoogleLogin={handleLogin}
+        onAuthError={(error) => console.error('Login error:', error)}
+      />
     );
   }
 
@@ -634,7 +683,6 @@ export default function App() {
         <AnimatePresence mode="wait">
           {activeView === 'dashboard' && (
             <DashboardView 
-              key="dashboard"
               notes={notes} 
               flashcards={flashcards} 
               onStartBreakthrough={handleStartBreakthrough}
@@ -726,11 +774,11 @@ export default function App() {
           )}
           {activeView === 'settings' && (
             <SettingsView
-              key="settings"
               onBackToChat={() => setActiveView('chat')}
               customPersonas={customPersonas}
               onSavePersona={handleSavePersona}
               onDeletePersona={handleDeletePersona}
+              user={user}
             />
           )}
         </AnimatePresence>

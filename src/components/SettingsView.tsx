@@ -20,12 +20,21 @@ import {
   Plus,
   Trash2,
   Edit3,
-  X
+  X,
+  User as UserIcon,
+  Globe
 } from 'lucide-react';
 import { AI_PROVIDERS, } from '../lib/aiModels';
 import { Note, Flashcard, ChatSession, Persona } from '../types';
 import { DEFAULT_PERSONA_ID } from '../lib/personas';
 import { cn } from '../lib/utils';
+import { User } from 'firebase/auth';
+import {
+  getUserApiKeys,
+  saveUserApiKey,
+  deleteUserApiKey,
+  UserApiKeys,
+} from '../services/userApiKeyService';
 
 type ProviderStatus = {
   key: string;
@@ -94,13 +103,15 @@ interface SettingsViewProps {
   customPersonas?: Persona[];
   onSavePersona?: (persona: Persona) => Promise<void>;
   onDeletePersona?: (id: string) => Promise<void>;
+  user?: User | null;
 }
 
-export default function SettingsView({ 
+export default function SettingsView({
   onBackToChat,
   customPersonas = [],
   onSavePersona,
-  onDeletePersona
+  onDeletePersona,
+  user
 }: SettingsViewProps) {
   const [providerStatus, setProviderStatus] = useState<Record<string, ProviderStatus>>({});
   const [openAIOAuthStatus, setOpenAIOAuthStatus] = useState<OpenAIOAuthStatus | null>(null);
@@ -109,7 +120,11 @@ export default function SettingsView({
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
+
+  const [userApiKeys, setUserApiKeys] = useState<UserApiKeys | null>(null);
+  const [isLoadingUserKeys, setIsLoadingUserKeys] = useState(false);
+  const [isSavingUserKey, setIsSavingUserKey] = useState<string | null>(null);
+
   // Persona Lab State
   const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
   const [editingPersona, setEditingPersona] = useState<Partial<Persona> | null>(null);
@@ -120,6 +135,10 @@ export default function SettingsView({
     systemPrompt: '',
     category: 'custom'
   });
+
+  const [connectedProviders, setConnectedProviders] = useState<string[]>([]);
+  const [isLoadingProviders, setIsLoadingProviders] = useState(false);
+  const [isUnlinking, setIsUnlinking] = useState<string | null>(null);
 
   const hasUnsavedChanges = useMemo(
     () => Object.values(draftValues).some((value) => value.trim().length > 0),
@@ -155,9 +174,28 @@ export default function SettingsView({
     }
   }, []);
 
+  const loadUserApiKeys = useCallback(async () => {
+    if (!user) return;
+    setIsLoadingUserKeys(true);
+    try {
+      const keys = await getUserApiKeys();
+      setUserApiKeys(keys);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsLoadingUserKeys(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     void loadStatus();
   }, [loadStatus]);
+
+  useEffect(() => {
+    if (user) {
+      void loadUserApiKeys();
+    }
+  }, [user, loadUserApiKeys]);
 
   useEffect(() => {
     if (openAIOAuthStatus?.loginStatus !== 'pending') {
@@ -224,6 +262,50 @@ export default function SettingsView({
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSaveUserApiKey = async (provider: string, apiKey: string, baseUrl?: string) => {
+    if (!user) {
+      setError('请先登录后再保存个人 API Key');
+      return;
+    }
+    setIsSavingUserKey(provider);
+    setFeedback(null);
+    setError(null);
+    try {
+      await saveUserApiKey(provider, apiKey, baseUrl);
+      setFeedback(`${provider} 个人 API Key 已保存`);
+      setDraftValues((prev) => {
+        const next = { ...prev };
+        delete next[`${provider}_key`];
+        delete next[`${provider}_baseUrl`];
+        return next;
+      });
+      await loadUserApiKeys();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSavingUserKey(null);
+    }
+  };
+
+  const handleDeleteUserApiKey = async (provider: string) => {
+    if (!user) {
+      setError('请先登录后再删除个人 API Key');
+      return;
+    }
+    setIsSavingUserKey(provider);
+    setFeedback(null);
+    setError(null);
+    try {
+      await deleteUserApiKey(provider);
+      setFeedback(`${provider} 个人 API Key 已删除，将使用全局配置`);
+      await loadUserApiKeys();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSavingUserKey(null);
     }
   };
 
@@ -352,7 +434,7 @@ export default function SettingsView({
 
   const handleDeletePersonaClick = async (id: string) => {
     if (!onDeletePersona || !window.confirm('确定要删除这个导师人格吗？该人格下的已有对话仍可查看，但无法再以该身份开启新对话。')) return;
-    
+
     setIsSaving(true);
     try {
       await onDeletePersona(id);
@@ -362,6 +444,74 @@ export default function SettingsView({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const fetchConnectedProviders = useCallback(async () => {
+    if (!user) return;
+    setIsLoadingProviders(true);
+    try {
+      const response = await fetch('/api/account/connected-providers');
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      setConnectedProviders(data.providers || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '获取账号绑定状态失败');
+    } finally {
+      setIsLoadingProviders(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      void fetchConnectedProviders();
+    }
+  }, [user, fetchConnectedProviders]);
+
+  const handleUnlinkProvider = async (provider: string) => {
+    if (connectedProviders.length <= 1) {
+      setError('至少需要保留一个登录方式，无法解绑最后一个账号');
+      return;
+    }
+    if (!window.confirm(`确定要解绑${provider === 'wechat' ? '微信' : provider === 'qq' ? 'QQ' : provider}账号吗？`)) return;
+
+    setIsUnlinking(provider);
+    setFeedback(null);
+    setError(null);
+    try {
+      const response = await fetch('/api/account/unlink-provider', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      setFeedback(`${provider === 'wechat' ? '微信' : provider === 'qq' ? 'QQ' : provider}账号已解绑`);
+      await fetchConnectedProviders();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '解绑失败');
+    } finally {
+      setIsUnlinking(null);
+    }
+  };
+
+  const handleBindProvider = (provider: string) => {
+    if (!user) {
+      setError('请先登录');
+      return;
+    }
+    const uid = user.uid;
+    const url = provider === 'wechat'
+      ? `/auth/wechat/start?action=link&currentUid=${uid}`
+      : provider === 'qq'
+      ? `/auth/qq/start?action=link&currentUid=${uid}`
+      : null;
+    if (url) {
+      window.location.href = url;
+    }
+  };
+
+  const isProviderConnected = (provider: string) => {
+    if (provider === 'google') return !!user;
+    return connectedProviders.includes(provider);
   };
 
   return (
@@ -578,94 +728,323 @@ export default function SettingsView({
           </div>
         )}
 
-        <div className="grid gap-4">
-          {PROVIDER_SETTINGS.map((item) => {
-            const provider = AI_PROVIDERS[item.providerId];
-            const status = providerStatus[item.envVar];
-            return (
-              <div key={item.envVar} className="rounded-3xl border border-border-main bg-card p-6 shadow-sm">
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div className="space-y-2">
+        {user && (
+          <div className="rounded-3xl border border-border-main bg-card p-6 shadow-sm">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center text-accent flex-shrink-0">
+                <UserIcon size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg">个人 API Key 配置</h3>
+                <p className="text-sm text-text-sub leading-relaxed">
+                  为每个 AI 提供商配置个人 API Key。个人配置将优先于全局环境变量配置。
+                  删除个人配置后将自动回退到全局配置。
+                </p>
+              </div>
+            </div>
+
+            {isLoadingUserKeys && (
+              <div className="py-8 flex items-center justify-center">
+                <RefreshCw className="w-6 h-6 animate-spin text-text-muted" />
+              </div>
+            )}
+
+            <div className="grid gap-4">
+              {PROVIDER_SETTINGS.map((item) => {
+                const provider = AI_PROVIDERS[item.providerId];
+                const userKey = userApiKeys?.[item.providerId];
+                const hasUserKey = Boolean(userKey?.apiKey);
+                const envStatus = providerStatus[item.envVar];
+                const hasEnvKey = envStatus?.configured ?? false;
+                const isActiveKey = hasUserKey ? 'personal' : hasEnvKey ? 'global' : 'none';
+                const draftKey = draftValues[`${item.providerId}_key`] || '';
+                const draftBaseUrl = draftValues[`${item.providerId}_baseUrl`] || '';
+
+                return (
+                  <div key={item.providerId} className="rounded-2xl border border-border-main bg-secondary/30 p-5">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <h4 className="text-lg font-bold">{item.title}</h4>
+                          {isActiveKey === 'personal' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-3 py-1 text-xs font-bold text-accent">
+                              <UserIcon size={12} />
+                              使用个人配置
+                            </span>
+                          ) : isActiveKey === 'global' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-3 py-1 text-xs font-bold text-blue-400">
+                              <Globe size={12} />
+                              使用全局配置
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1 text-xs font-bold text-text-muted">
+                              <CircleOff size={12} />
+                              未配置
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-text-sub">{item.description}</p>
+                        {hasUserKey && (
+                          <div className="text-xs text-text-muted">
+                            个人 Key: <code className="bg-secondary px-1 py-0.5 rounded">{userKey!.apiKey.slice(0, 4)}****{userKey!.apiKey.slice(-4)}</code>
+                            {userKey!.baseUrl && (
+                              <span> · 上游: <code className="bg-secondary px-1 py-0.5 rounded">{userKey!.baseUrl}</code></span>
+                            )}
+                          </div>
+                        )}
+                        {!hasUserKey && hasEnvKey && envStatus?.valuePreview && (
+                          <div className="text-xs text-text-muted">
+                            全局 Key: <code className="bg-secondary px-1 py-0.5 rounded">{envStatus.valuePreview}</code>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="w-full md:w-[28rem] space-y-3">
+                        <input
+                          type="password"
+                          value={draftKey}
+                          onChange={(e) =>
+                            setDraftValues((prev) => ({ ...prev, [`${item.providerId}_key`]: e.target.value }))
+                          }
+                          placeholder={hasUserKey ? '输入新 Key 替换当前配置' : item.placeholder}
+                          disabled={isSavingUserKey === item.providerId}
+                          className="w-full rounded-2xl border border-border-main bg-secondary px-4 py-3 text-sm text-text-main placeholder:text-text-muted/40 outline-none focus:border-accent/40 disabled:opacity-50"
+                        />
+                        {item.baseUrlEnvVar && (
+                          <input
+                            type="text"
+                            value={draftBaseUrl}
+                            onChange={(e) =>
+                              setDraftValues((prev) => ({ ...prev, [`${item.providerId}_baseUrl`]: e.target.value }))
+                            }
+                            placeholder={`自定义上游地址 (默认: ${provider.baseUrl || '官方'})`}
+                            disabled={isSavingUserKey === item.providerId}
+                            className="w-full rounded-2xl border border-border-main bg-secondary px-4 py-3 text-sm text-text-main placeholder:text-text-muted/40 outline-none focus:border-accent/40 disabled:opacity-50"
+                          />
+                        )}
+                        <div className="flex items-center justify-end gap-2">
+                          {hasUserKey && (
+                            <button
+                              onClick={() => void handleDeleteUserApiKey(item.providerId)}
+                              disabled={isSavingUserKey === item.providerId}
+                              className="px-4 py-2 rounded-full bg-tertiary text-text-main text-sm font-bold hover:bg-secondary transition-colors disabled:opacity-50"
+                            >
+                              {isSavingUserKey === item.providerId ? (
+                                <RefreshCw className="w-4 h-4 animate-spin inline" />
+                              ) : (
+                                '删除个人配置'
+                              )}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => void handleSaveUserApiKey(item.providerId, draftKey, draftBaseUrl || undefined)}
+                            disabled={isSavingUserKey === item.providerId || !draftKey.trim()}
+                            className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-bold text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isSavingUserKey === item.providerId ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Save className="w-4 h-4" />
+                            )}
+                            {hasUserKey ? '更新' : '保存'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {!user && (
+          <div className="rounded-3xl border border-border-main bg-card p-6 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-xl bg-tertiary flex items-center justify-center text-text-muted flex-shrink-0">
+                <KeyRound size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg mb-1">个人 API Key 配置</h3>
+                <p className="text-sm text-text-sub">
+                  登录后可配置个人 API Key。个人配置将覆盖全局环境变量，实现多用户隔离。
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-3xl border border-border-main bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <Globe className="w-5 h-5 text-text-muted" />
+            <h3 className="font-bold text-lg">全局 API Key 配置</h3>
+          </div>
+          <p className="text-sm text-text-sub mb-4">
+            以下配置来自服务器环境变量 (.env.local)，作为所有用户的默认配置。个人配置将覆盖这些全局设置。
+          </p>
+
+          <div className="grid gap-4">
+            {PROVIDER_SETTINGS.map((item) => {
+              const envStatus = providerStatus[item.envVar];
+              const userKey = userApiKeys?.[item.providerId];
+              const isOverridden = Boolean(userKey?.apiKey);
+
+              return (
+                <div key={item.envVar} className={`rounded-2xl border border-border-main bg-secondary/30 p-4 ${isOverridden ? 'opacity-60' : ''}`}>
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-xl font-bold">{item.title}</h3>
-                      {status?.configured ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-3 py-1 text-xs font-bold text-green-400">
-                          <CheckCircle2 size={12} />
+                      <h4 className="font-bold">{item.title}</h4>
+                      {envStatus?.configured ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-bold text-green-400">
+                          <CheckCircle2 size={10} />
                           已配置
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1 text-xs font-bold text-text-muted">
-                          <CircleOff size={12} />
+                        <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-xs font-bold text-text-muted">
+                          <CircleOff size={10} />
                           未配置
                         </span>
                       )}
-                    </div>
-                    <p className="text-sm text-text-sub leading-relaxed">{item.description}</p>
-                    <div className="text-xs text-text-muted">
-                      环境变量：<code>{item.envVar}</code>
-                      {status?.valuePreview ? ` · 当前预览：${status.valuePreview}` : ''}
-                    </div>
-                    {item.baseUrlEnvVar && (
-                      <div className="text-xs text-text-muted">
-                        上游覆盖变量：<code>{item.baseUrlEnvVar}</code>
-                        {provider.baseUrl ? ` · 默认：${provider.baseUrl}` : ''}
-                      </div>
-                    )}
-                    <a
-                      href={provider.docsUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-bold text-accent hover:text-accent-hover transition-colors"
-                    >
-                      查看官方文档
-                      <ExternalLink size={12} />
-                    </a>
-                  </div>
-                  <div className="w-full md:w-[28rem] space-y-3">
-                    <input
-                      type="password"
-                      value={draftValues[item.envVar] || ''}
-                      onChange={(event) =>
-                        setDraftValues((prev) => ({ ...prev, [item.envVar]: event.target.value }))
-                      }
-                      placeholder={item.placeholder}
-                      className="w-full rounded-2xl border border-border-main bg-secondary px-4 py-3 text-sm text-text-main placeholder:text-text-muted/40 outline-none focus:border-accent/40"
-                    />
-                    {item.baseUrlEnvVar && (
-                      <input
-                        type="text"
-                        value={draftValues[item.baseUrlEnvVar] || ''}
-                        onChange={(event) =>
-                          setDraftValues((prev) => ({ ...prev, [item.baseUrlEnvVar as string]: event.target.value }))
-                        }
-                        placeholder={provider.baseUrl}
-                        className="w-full rounded-2xl border border-border-main bg-secondary px-4 py-3 text-sm text-text-main placeholder:text-text-muted/40 outline-none focus:border-accent/40"
-                      />
-                    )}
-                    <div className="flex items-center justify-end gap-2">
-                      {item.baseUrlEnvVar && (
-                        <button
-                          onClick={() => void handleClear(item.baseUrlEnvVar as string)}
-                          disabled={isSaving}
-                          className="px-4 py-2 rounded-full bg-tertiary text-text-main text-sm font-bold hover:bg-secondary transition-colors disabled:opacity-50"
-                        >
-                          清空上游
-                        </button>
+                      {isOverridden && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-bold text-accent">
+                          <UserIcon size={10} />
+                          已被个人配置覆盖
+                        </span>
                       )}
-                      <button
-                        onClick={() => void handleClear(item.envVar)}
-                        disabled={isSaving}
-                        className="px-4 py-2 rounded-full bg-tertiary text-text-main text-sm font-bold hover:bg-secondary transition-colors disabled:opacity-50"
-                      >
-                        清空
-                      </button>
+                    </div>
+                    <div className="text-xs text-text-muted">
+                      <code>{item.envVar}</code>
+                      {envStatus?.valuePreview && (
+                        <span className="ml-2">{envStatus.valuePreview}</span>
+                      )}
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
+
+        {user && (
+          <div className="rounded-3xl border border-border-main bg-card overflow-hidden shadow-sm">
+            <div className="p-6 border-b border-border-main bg-secondary/30">
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="w-5 h-5 text-accent" />
+                <div>
+                  <h3 className="font-bold text-lg">账号绑定</h3>
+                  <p className="text-xs text-text-sub">管理您的第三方登录方式</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {isLoadingProviders ? (
+                <div className="py-8 flex items-center justify-center">
+                  <RefreshCw className="w-6 h-6 animate-spin text-text-muted" />
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between p-4 rounded-2xl bg-secondary/50 border border-border-main">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M23.766 12.2764c0-.8514-.0764-1.7088-.2223-2.5507H12.24v4.8277h6.4586c-.2764 1.4588-1.1172 2.6916-2.3766 3.5136l3.845 2.979c2.2414-2.0656 3.5388-5.1094 3.5388-8.7696z" fill="#4285F4"/>
+                          <path d="M12.2401 24c3.2146 0 5.9115-1.0652 7.8829-2.8825l-3.845-2.979c-1.0635.711-2.4248 1.1316-4.0379 1.1316-3.1066 0-5.7358-2.0944-6.6728-4.9109l-3.9778 3.0786C3.8523 21.2052 7.7798 24 12.2401 24z" fill="#34A853"/>
+                          <path d="M5.5673 14.3591c-.4716-1.3935-.4716-2.9004 0-4.2939L1.5895 6.9866C-.1969 10.3017-.1969 14.6984 1.5895 18.0135l3.9778-3.0786-.0001-.5758z" fill="#FBBC05"/>
+                          <path d="M12.2401 4.7493c1.7506 0 3.3229.6016 4.5563 1.7819l3.4206-3.4206C17.7453 1.1695 15.0484 0 12.2401 0 7.7798 0 3.8523 2.7948 1.5895 6.9866l3.9778 3.0786c.937-2.8165 3.5662-4.9109 6.6728-4.9109z" fill="#EA4335"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-text-main">Google 账号</h4>
+                        <p className="text-xs text-text-sub">{user.email || user.displayName || '已登录'}</p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-3 py-1 text-xs font-bold text-green-400">
+                      <CheckCircle2 size={12} />
+                      已绑定
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 rounded-2xl bg-secondary/50 border border-border-main">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-green-500" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 0 1 .598.082l1.584.926a.272.272 0 0 0 .14.045c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 0 1-.023-.156.49.49 0 0 1 .201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.27-.027-.407-.032zm-2.53 3.274c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.969-.982z"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-text-main">微信</h4>
+                        <p className="text-xs text-text-sub">
+                          {isProviderConnected('wechat') ? '已绑定微信账号' : '未绑定'}
+                        </p>
+                      </div>
+                    </div>
+                    {isProviderConnected('wechat') ? (
+                      <button
+                        onClick={() => void handleUnlinkProvider('wechat')}
+                        disabled={isUnlinking === 'wechat'}
+                        className="px-4 py-2 rounded-full bg-tertiary text-text-main text-sm font-bold hover:bg-secondary transition-colors disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {isUnlinking === 'wechat' ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <CircleOff className="w-4 h-4" />
+                        )}
+                        解绑
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleBindProvider('wechat')}
+                        className="px-4 py-2 rounded-full bg-accent text-white text-sm font-bold hover:bg-accent-hover transition-all flex items-center gap-2 shadow-lg shadow-accent/20"
+                      >
+                        <LogIn className="w-4 h-4" />
+                        去绑定
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 rounded-2xl bg-secondary/50 border border-border-main">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12.003 2c-2.265 0-6.29 1.364-6.29 7.325v1.195S3.55 14.96 3.55 17.474c0 .665.17 1.025.281 1.025.114 0 .902-.484 1.748-2.072 0 0-.18 2.197 1.904 3.967 0 0-1.77.495-1.77 1.182 0 .686 4.078.43 6.29.43 2.21 0 6.287.257 6.287-.43 0-.687-1.768-1.182-1.768-1.182 2.085-1.77 1.905-3.967 1.905-3.967.845 1.588 1.634 2.072 1.746 2.072.111 0 .283-.36.283-1.025 0-2.514-2.164-6.954-2.164-6.954V9.325C18.29 3.364 14.268 2 12.003 2z"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-text-main">QQ</h4>
+                        <p className="text-xs text-text-sub">
+                          {isProviderConnected('qq') ? '已绑定QQ账号' : '未绑定'}
+                        </p>
+                      </div>
+                    </div>
+                    {isProviderConnected('qq') ? (
+                      <button
+                        onClick={() => void handleUnlinkProvider('qq')}
+                        disabled={isUnlinking === 'qq'}
+                        className="px-4 py-2 rounded-full bg-tertiary text-text-main text-sm font-bold hover:bg-secondary transition-colors disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {isUnlinking === 'qq' ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <CircleOff className="w-4 h-4" />
+                        )}
+                        解绑
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleBindProvider('qq')}
+                        className="px-4 py-2 rounded-full bg-accent text-white text-sm font-bold hover:bg-accent-hover transition-all flex items-center gap-2 shadow-lg shadow-accent/20"
+                      >
+                        <LogIn className="w-4 h-4" />
+                        去绑定
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-end">
           <button
