@@ -1,121 +1,45 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, AlertTriangle } from 'lucide-react';
-import { signInWithCustomToken } from 'firebase/auth';
-import { auth } from '../../firebase';
+import React, { useEffect, useState } from 'react';
+import { Loader2, AlertTriangle, CheckCircle } from 'lucide-react';
+import { authClient } from '../../auth/client';
 
 export interface AuthCallbackProps {
-  onSuccess?: (provider: string, isNewUser: boolean) => void;
+  onSuccess?: () => void;
   onError?: (error: Error) => void;
-  onComplete?: () => void;
 }
 
-function getFriendlyErrorMessage(error: unknown): string {
-  if (!(error instanceof Error)) {
-    return '登录失败，请重试。';
-  }
-
-  const message = error.message.toLowerCase();
-
-  if (message.includes('auth/invalid-custom-token')) {
-    return '登录凭证无效，请重新发起授权登录。';
-  }
-  if (message.includes('auth/custom-token-mismatch')) {
-    return '登录凭证与当前应用不匹配，请重新授权。';
-  }
-  if (message.includes('auth/user-disabled')) {
-    return '该账号已被禁用，请联系管理员。';
-  }
-  if (message.includes('auth/network-request-failed')) {
-    return '网络异常，请检查网络后重试。';
-  }
-
-  return '登录失败，请稍后重试。';
-}
-
-function providerName(provider: string | null): string {
-  if (provider === 'wechat') return '微信';
-  if (provider === 'qq') return 'QQ';
-  return '第三方';
-}
-
-function parseIsNewUser(value: string | null): boolean {
-  return value?.toLowerCase() === 'true';
-}
-
-export default function AuthCallback({ onSuccess, onError, onComplete }: AuthCallbackProps) {
-  const [status, setStatus] = useState<'loading' | 'error'>('loading');
+export default function AuthCallback({ onSuccess, onError }: AuthCallbackProps) {
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
-  const hasStartedRef = useRef(false);
-
-  const params = useMemo(() => {
-    if (typeof window === 'undefined') {
-      return {
-        token: null,
-        provider: null,
-        isNewUser: false,
-      };
-    }
-
-    const searchParams = new URLSearchParams(window.location.search);
-    return {
-      token: searchParams.get('token'),
-      provider: searchParams.get('provider'),
-      isNewUser: parseIsNewUser(searchParams.get('isNewUser')),
-    };
-  }, []);
 
   useEffect(() => {
-    if (hasStartedRef.current) return;
-    hasStartedRef.current = true;
-
-    let isMounted = true;
-
-    const completeOAuth = async () => {
+    const handleCallback = async () => {
       try {
-        if (!params.token) {
-          throw new Error('missing_token');
+        const { data, error } = await authClient.getSession();
+        
+        if (error) {
+          throw new Error(error.message || '授权登录失败');
         }
 
-        await signInWithCustomToken(auth, params.token);
-
-        if (!isMounted) return;
-
-        const cleanPath = window.location.pathname;
-        window.history.replaceState({}, document.title, cleanPath);
-
-        if (onSuccess) {
-          onSuccess(params.provider ?? 'unknown', params.isNewUser);
-          onComplete?.();
-          return;
+        if (!data?.user) {
+          throw new Error('无法获取用户信息');
         }
 
-        onComplete?.();
-
-        window.location.assign('/');
+        setStatus('success');
+        onSuccess?.();
+        
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1500);
       } catch (err) {
-        if (!isMounted) return;
-
-        const normalizedError =
-          err instanceof Error
-            ? err
-            : new Error(typeof err === 'string' ? err : 'OAuth callback failed');
-
-        const friendly = normalizedError.message === 'missing_token'
-          ? '缺少登录凭证，请从微信或 QQ 登录入口重新进入。'
-          : getFriendlyErrorMessage(normalizedError);
-
-        setErrorMessage(friendly);
+        const message = err instanceof Error ? err.message : '登录失败，请重试';
+        setErrorMessage(message);
         setStatus('error');
-        onError?.(normalizedError);
+        onError?.(err instanceof Error ? err : new Error(message));
       }
     };
 
-    void completeOAuth();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [onComplete, onError, onSuccess, params.isNewUser, params.provider, params.token]);
+    handleCallback();
+  }, [onSuccess, onError]);
 
   if (status === 'error') {
     return (
@@ -142,6 +66,26 @@ export default function AuthCallback({ onSuccess, onError, onComplete }: AuthCal
     );
   }
 
+  if (status === 'success') {
+    return (
+      <div className="min-h-screen bg-primary text-text-main flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-secondary border border-border-main rounded-2xl p-6 shadow-xl">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-green-500/10 text-green-500">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold">登录成功</h1>
+              <p className="text-sm text-text-sub mt-1">
+                正在跳转到首页...
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-primary text-text-main flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-secondary border border-border-main rounded-2xl p-6 shadow-xl">
@@ -150,7 +94,7 @@ export default function AuthCallback({ onSuccess, onError, onComplete }: AuthCal
           <div>
             <h1 className="text-lg font-bold">正在完成授权登录</h1>
             <p className="text-sm text-text-sub mt-1">
-              正在使用 {providerName(params.provider)} 账号建立安全会话，请稍候...
+              正在建立安全会话，请稍候...
             </p>
           </div>
         </div>

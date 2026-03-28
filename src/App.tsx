@@ -25,7 +25,7 @@ import { Note, Flashcard, ChatMessage, ChatSession, Persona } from './types';
 import { chatWithAI, processConversation, findSemanticLinks, generateEmbedding, BreakthroughConfig, startBreakthroughChat } from './services/gemini';
 import { cn } from './lib/utils';
 import { schedule, Rating } from './services/fsrs';
-import { auth, db } from './firebase';
+import { authClient } from './auth/client';
 
 // Components
 import ChatView from './components/ChatView';
@@ -35,52 +35,19 @@ import NotesView from './components/NotesView';
 import DashboardView from './components/DashboardView';
 import SettingsView from './components/SettingsView';
 import LoginSelection from './components/auth/LoginSelection';
-import AuthCallback from './components/auth/AuthCallback';
 
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  addDoc, 
-  deleteDoc, 
-  doc, 
-  setDoc, 
-  getDocs,
-  Timestamp,
-  getDocFromServer
-} from 'firebase/firestore';
+import { notesApi, flashcardsApi, chatSessionsApi, personasApi } from './services/dataApi';
 
 type View = 'chat' | 'graph' | 'review' | 'notes' | 'dashboard' | 'settings';
-type AuthFlowView = 'callback' | 'login' | 'main';
 
-enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId: string | undefined;
-    email: string | null | undefined;
-    emailVerified: boolean | undefined;
-    isAnonymous: boolean | undefined;
-    tenantId: string | null | undefined;
-    providerInfo: {
-      providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
-    }[];
-  }
+interface BetterAuthUser {
+  id: string;
+  email?: string;
+  name?: string;
+  image?: string;
+  emailVerified?: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 function sanitizeChatSession(session: ChatSession, userId: string) {
@@ -96,82 +63,12 @@ function sanitizeChatSession(session: ChatSession, userId: string) {
     updatedAt: session.updatedAt,
     userId,
   };
-  // 保留导入元数据（Firestore 不接受 undefined，仅写入有值的字段）
   if (session.source) base.source = session.source;
   if (session.importedAt) base.importedAt = session.importedAt;
   if (session.fingerprint) base.fingerprint = session.fingerprint;
   if (session.originalExportedAt) base.originalExportedAt = session.originalExportedAt;
   if (session.personaId) base.personaId = session.personaId;
   return base;
-}
-
-function sanitizeChatSessionLegacy(session: ChatSession, userId: string) {
-  return {
-    id: session.id,
-    title: session.title || '新会话',
-    messages: session.messages.map((message) => {
-      const m: Record<string, any> = { role: message.role, text: message.text };
-      if (message.image) m.image = message.image;
-      if (message.thought) m.thought = message.thought;
-      return m;
-    }),
-    updatedAt: session.updatedAt,
-    userId,
-  };
-}
-
-function isPermissionDeniedError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes('Missing or insufficient permissions');
-}
-
-function hasExtendedSessionMetadata(session: ChatSession) {
-  return Boolean(
-    session.source ||
-    session.importedAt ||
-    session.fingerprint ||
-    session.originalExportedAt ||
-    session.personaId
-  );
-}
-
-async function saveSessionViaServer(session: ChatSession, user: User) {
-  const idToken = await user.getIdToken();
-  const response = await fetch('/api/chat-sessions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify({ session }),
-  });
-
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
-    },
-    operationType,
-    path
-  }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
 }
 
 function sanitizeNoteForStorage(note: Note) {
@@ -197,13 +94,13 @@ function sanitizeNoteForStorage(note: Note) {
   return payload;
 }
 
-const appEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env;
-const DEV_AUTH_BYPASS_ENABLED = Boolean(appEnv?.DEV) && appEnv?.VITE_DISABLE_AUTH !== '0';
-const DEV_USER_ID = '__dev_local_user__';
-
 function isEmbeddingUnsupportedError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('embedding 仅支持 API Key 路径');
 }
+
+const appEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env;
+const DEV_AUTH_BYPASS_ENABLED = Boolean(appEnv?.DEV) && appEnv?.VITE_DISABLE_AUTH !== '0';
+const DEV_USER_ID = '__dev_local_user__';
 
 export default function App() {
   const [activeView, setActiveView] = useState<View>('chat');
@@ -214,13 +111,8 @@ export default function App() {
   const [customPersonas, setCustomPersonas] = useState<Persona[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<BetterAuthUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
-  const [pathname, setPathname] = useState(() => {
-    if (typeof window === 'undefined') return '/';
-    return window.location.pathname;
-  });
-  const [authFlowView, setAuthFlowView] = useState<AuthFlowView>('login');
   const [breakthroughConfig, setBreakthroughConfig] = useState<BreakthroughConfig | null>(null);
   const [noteEditMode, setNoteEditMode] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -232,8 +124,7 @@ export default function App() {
     return true;
   });
   const isUsingDevAuthBypass = DEV_AUTH_BYPASS_ENABLED && !user;
-  const effectiveUserId = user?.uid ?? (isUsingDevAuthBypass ? DEV_USER_ID : null);
-  const isAuthCallbackRoute = pathname === '/auth/complete';
+  const effectiveUserId = user?.id ?? (isUsingDevAuthBypass ? DEV_USER_ID : null);
 
   const [showHiddenPersonas, setShowHiddenPersonas] = useState(() => {
     return localStorage.getItem('os_show_hidden_personas') === 'true';
@@ -251,33 +142,13 @@ export default function App() {
   }, [isDarkMode]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+    const checkAuth = async () => {
+      const { data } = await authClient.getSession();
+      setUser(data?.user ?? null);
       setIsAuthReady(true);
-    });
-    return () => unsubscribe();
+    };
+    checkAuth();
   }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handlePathChange = () => setPathname(window.location.pathname);
-    window.addEventListener('popstate', handlePathChange);
-    return () => window.removeEventListener('popstate', handlePathChange);
-  }, []);
-
-  useEffect(() => {
-    if (isAuthCallbackRoute) {
-      setAuthFlowView('callback');
-      return;
-    }
-
-    if (user || isUsingDevAuthBypass) {
-      setAuthFlowView('main');
-      return;
-    }
-
-    setAuthFlowView('login');
-  }, [isAuthCallbackRoute, user, isUsingDevAuthBypass]);
 
   useEffect(() => {
     if (!isAuthReady) {
@@ -296,85 +167,38 @@ export default function App() {
 
     setIsLoadingData(true);
 
-    // Test connection
-    const testConnection = async () => {
+    const loadData = async () => {
       try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
+        const [notesData, cardsData, sessionsData, personasData] = await Promise.all([
+          notesApi.list(),
+          flashcardsApi.list(),
+          chatSessionsApi.list(),
+          personasApi.list(),
+        ]);
+
+        setNotes(notesData.sort((a, b) => b.createdAt - a.createdAt));
+        setFlashcards(cardsData);
+        setChatSessions(sessionsData.sort((a, b) => b.updatedAt - a.updatedAt));
+        setCustomPersonas(personasData);
       } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
-        }
+        console.error('Failed to load data:', error);
+      } finally {
+        setIsLoadingData(false);
       }
     };
-    testConnection();
 
-    const notesQuery = query(collection(db, 'notes'), where('userId', '==', user.uid));
-    const unsubscribeNotes = onSnapshot(notesQuery, (snapshot) => {
-      const notesData = snapshot.docs.map(doc => ({ ...doc.data() } as Note));
-      setNotes(notesData.sort((a, b) => (b.createdAt as any) - (a.createdAt as any)));
-      setIsLoadingData(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'notes');
-    });
-
-    const cardsQuery = query(collection(db, 'flashcards'), where('userId', '==', user.uid));
-    const unsubscribeCards = onSnapshot(cardsQuery, (snapshot) => {
-      const cardsData = snapshot.docs.map(doc => ({ ...doc.data() } as Flashcard));
-      setFlashcards(cardsData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'flashcards');
-    });
-
-    const sessionsQuery = query(collection(db, 'chat_sessions'), where('userId', '==', user.uid));
-    const unsubscribeSessions = onSnapshot(sessionsQuery, (snapshot) => {
-      const sessionsData = snapshot.docs.map(doc => ({ ...doc.data() } as ChatSession));
-      setChatSessions(sessionsData.sort((a, b) => b.updatedAt - a.updatedAt));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'chat_sessions');
-    });
-
-    return () => {
-      unsubscribeNotes();
-      unsubscribeCards();
-      unsubscribeSessions();
-    };
+    loadData();
   }, [isAuthReady, user, isUsingDevAuthBypass]);
 
   const handleLogin = async () => {
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      await authClient.signIn.social({
+        provider: 'google',
+        callbackURL: window.location.origin,
+      });
     } catch (error) {
       console.error("Login failed:", error);
     }
-  };
-
-  const handleWeChatLogin = async () => {
-    try {
-      const response = await fetch('/auth/wechat/start');
-      const { authUrl } = await response.json();
-      window.location.href = authUrl;
-    } catch (error) {
-      console.error('WeChat login failed:', error);
-    }
-  };
-
-  const handleQQLogin = async () => {
-    try {
-      const response = await fetch('/auth/qq/start');
-      const { authUrl } = await response.json();
-      window.location.href = authUrl;
-    } catch (error) {
-      console.error('QQ login failed:', error);
-    }
-  };
-
-  const handleAuthCallbackComplete = () => {
-    if (typeof window === 'undefined') return;
-    if (window.location.pathname === '/auth/complete') {
-      window.history.replaceState({}, '', '/');
-    }
-    setPathname(window.location.pathname);
   };
 
   const handleLogout = async () => {
@@ -388,7 +212,8 @@ export default function App() {
       return;
     }
     try {
-      await signOut(auth);
+      await authClient.signOut();
+      setUser(null);
       setActiveView('dashboard');
       setBreakthroughConfig(null);
     } catch (error) {
@@ -421,7 +246,6 @@ export default function App() {
         note.codeSnippet = newNoteData.codeSnippet;
       }
 
-      // Generate embedding for semantic search
       try {
         const embeddingText = `${note.title} ${note.summary} ${note.tags.join(' ')}`;
         (note as any).embedding = await generateEmbedding(embeddingText);
@@ -431,11 +255,9 @@ export default function App() {
         }
       }
 
-      // Find semantic links
       const relatedIds = await findSemanticLinks(note, notes);
       note.relatedIds = relatedIds;
 
-      // Save flashcards to Firestore
       const cards: Flashcard[] = newFlashcards.map(cf => ({
         id: crypto.randomUUID(),
         noteId: noteId,
@@ -457,21 +279,22 @@ export default function App() {
         return;
       }
 
-      // Save note to Firestore
       try {
-        await setDoc(doc(db, 'notes', noteId), sanitizeNoteForStorage(note));
+        await notesApi.create(sanitizeNoteForStorage(note) as any);
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `notes/${noteId}`);
+        console.error('Failed to save note:', error);
       }
 
       for (const card of cards) {
         try {
-          await setDoc(doc(db, 'flashcards', card.id), card);
+          await flashcardsApi.create(card);
         } catch (error) {
-          handleFirestoreError(error, OperationType.WRITE, `flashcards/${card.id}`);
+          console.error('Failed to save flashcard:', error);
         }
       }
 
+      setNotes(prev => [note, ...prev]);
+      setFlashcards(prev => [...cards, ...prev]);
       setActiveView('notes');
     } catch (error) {
       console.error("Failed to save note:", error);
@@ -489,23 +312,10 @@ export default function App() {
       return;
     }
     try {
-      // Delete note
-      try {
-        await deleteDoc(doc(db, 'notes', id));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `notes/${id}`);
-      }
-
-      // Delete associated flashcards
-      const cardsToDelete = flashcards.filter(f => f.noteId === id);
-      for (const card of cardsToDelete) {
-        try {
-          await deleteDoc(doc(db, 'flashcards', card.id));
-        } catch (error) {
-          handleFirestoreError(error, OperationType.DELETE, `flashcards/${card.id}`);
-        }
-      }
-
+      await notesApi.delete(id);
+      await flashcardsApi.deleteByNoteId(id);
+      setNotes(prev => prev.filter(note => note.id !== id));
+      setFlashcards(prev => prev.filter(card => card.noteId !== id));
       if (selectedNoteId === id) setSelectedNoteId(null);
     } catch (error) {
       console.error("Failed to delete note:", error);
@@ -519,9 +329,10 @@ export default function App() {
       return;
     }
     try {
-      await setDoc(doc(db, 'notes', updatedNote.id), sanitizeNoteForStorage(updatedNote));
+      await notesApi.update(updatedNote.id, sanitizeNoteForStorage(updatedNote));
+      setNotes(prev => prev.map(note => note.id === updatedNote.id ? updatedNote : note));
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `notes/${updatedNote.id}`);
+      console.error("Failed to update note:", error);
     }
   };
 
@@ -530,10 +341,6 @@ export default function App() {
     setNoteEditMode(editMode);
     setActiveView('notes');
   };
-
-  if (authFlowView === 'callback') {
-    return <AuthCallback onSuccess={handleAuthCallbackComplete} />;
-  }
 
   if (!isAuthReady || isLoadingData) {
     return (
@@ -550,7 +357,7 @@ export default function App() {
     );
   }
 
-  if (authFlowView === 'login') {
+  if (!user && !isUsingDevAuthBypass) {
     return (
       <LoginSelection
         onGoogleLogin={handleLogin}
@@ -565,13 +372,15 @@ export default function App() {
       return;
     }
     try {
-      await setDoc(doc(db, 'custom_personas', persona.id), {
-        ...persona,
-        userId: effectiveUserId,
-        updatedAt: Date.now()
-      });
+      const existing = customPersonas.find(p => p.id === persona.id);
+      if (existing) {
+        await personasApi.update(persona.id, { ...persona, userId: effectiveUserId });
+      } else {
+        await personasApi.create({ ...persona, userId: effectiveUserId });
+      }
+      setCustomPersonas(prev => [persona, ...prev.filter(p => p.id !== persona.id)]);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `custom_personas/${persona.id}`);
+      console.error('Failed to save persona:', error);
     }
   };
 
@@ -581,9 +390,10 @@ export default function App() {
       return;
     }
     try {
-      await deleteDoc(doc(db, 'custom_personas', id));
+      await personasApi.delete(id);
+      setCustomPersonas(prev => prev.filter(p => p.id !== id));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `custom_personas/${id}`);
+      console.error('Failed to delete persona:', error);
     }
   };
 
@@ -602,7 +412,6 @@ export default function App() {
                 setShowHiddenPersonas(newState);
                 localStorage.setItem('os_show_hidden_personas', newState.toString());
                 logoClicks.current.count = 0;
-                // 震动或控制台视觉反馈（可选）
               }
             } else {
               logoClicks.current.count = 1;
@@ -685,11 +494,11 @@ export default function App() {
             </button>
           </div>
           <div className="px-4 py-2 flex items-center gap-3">
-            {user?.photoURL ? (
+            {user?.image ? (
               <img 
-                src={user.photoURL} 
+                src={user.image} 
                 className="w-8 h-8 rounded-full border border-border-main" 
-                alt={user.displayName || ''} 
+                alt={user.name || ''} 
               />
             ) : (
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-300 border border-border-main bg-tertiary text-text-muted">
@@ -697,7 +506,7 @@ export default function App() {
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold truncate">{user?.displayName || '本地开发免登录'}</p>
+              <p className="text-xs font-bold truncate">{user?.name || '本地开发免登录'}</p>
               <button 
                 onClick={handleLogout} 
                 className="text-[10px] transition-colors hover:text-accent text-text-muted"
@@ -781,40 +590,18 @@ export default function App() {
                   return;
                 }
                 try {
-                  await setDoc(
-                    doc(db, 'chat_sessions', session.id),
-                    sanitizeChatSession(session, user.uid)
-                  );
+                  const existing = chatSessions.find(s => s.id === session.id);
+                  if (existing) {
+                    await chatSessionsApi.update(session.id, sanitizeChatSession(session, user.id));
+                  } else {
+                    await chatSessionsApi.create(sanitizeChatSession(session, user.id) as ChatSession);
+                  }
+                  setChatSessions(prev => {
+                    const next = [sanitizeChatSession(session, user.id) as ChatSession, ...prev.filter(item => item.id !== session.id)];
+                    return next.sort((a, b) => b.updatedAt - a.updatedAt);
+                  });
                 } catch (error) {
-                  if (isPermissionDeniedError(error) && hasExtendedSessionMetadata(session)) {
-                    try {
-                      // 兼容线上尚未同步更新的旧 Firestore 规则：先确保会话能导入成功。
-                      await setDoc(
-                        doc(db, 'chat_sessions', session.id),
-                        sanitizeChatSessionLegacy(session, user.uid)
-                      );
-                      return;
-                    } catch (legacyError) {
-                      if (isPermissionDeniedError(legacyError)) {
-                        try {
-                          await saveSessionViaServer(session, user);
-                          return;
-                        } catch (serverError) {
-                          handleFirestoreError(serverError, OperationType.WRITE, `chat_sessions/${session.id}`);
-                        }
-                      }
-                      handleFirestoreError(legacyError, OperationType.WRITE, `chat_sessions/${session.id}`);
-                    }
-                  }
-                  if (isPermissionDeniedError(error)) {
-                    try {
-                      await saveSessionViaServer(session, user);
-                      return;
-                    } catch (serverError) {
-                      handleFirestoreError(serverError, OperationType.WRITE, `chat_sessions/${session.id}`);
-                    }
-                  }
-                  handleFirestoreError(error, OperationType.WRITE, `chat_sessions/${session.id}`);
+                  console.error('Failed to save session:', error);
                 }
               }}
               onDeleteSession={async (id) => {
@@ -823,9 +610,10 @@ export default function App() {
                   return;
                 }
                 try {
-                  await deleteDoc(doc(db, 'chat_sessions', id));
+                  await chatSessionsApi.delete(id);
+                  setChatSessions(prev => prev.filter(session => session.id !== id));
                 } catch (error) {
-                  handleFirestoreError(error, OperationType.DELETE, `chat_sessions/${id}`);
+                  console.error('Failed to delete session:', error);
                 }
               }}
               breakthroughConfig={breakthroughConfig}
@@ -855,9 +643,10 @@ export default function App() {
                   return;
                 }
                 try {
-                  await setDoc(doc(db, 'flashcards', card.id), updatedCard);
+                  await flashcardsApi.update(card.id, updatedCard);
+                  setFlashcards(prev => prev.map(item => item.id === card.id ? updatedCard : item));
                 } catch (error) {
-                  handleFirestoreError(error, OperationType.WRITE, `flashcards/${card.id}`);
+                  console.error('Failed to review card:', error);
                 }
               }}
             />
@@ -880,7 +669,7 @@ export default function App() {
               customPersonas={customPersonas}
               onSavePersona={handleSavePersona}
               onDeletePersona={handleDeletePersona}
-              user={user}
+              user={user as any}
             />
           )}
         </AnimatePresence>
