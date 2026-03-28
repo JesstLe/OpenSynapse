@@ -14,6 +14,7 @@ import {
   loadOpenAICodexSession,
   startOpenAICodexCallbackServer,
 } from './src/lib/openaiCodexOAuth';
+import { loadCredentials as loadGeminiCredentials } from './src/lib/oauth';
 
 async function startServer() {
   const app = express();
@@ -184,6 +185,19 @@ async function startServer() {
       authUrl: openAIOAuthFlow.status === 'pending' ? openAIOAuthFlow.authUrl ?? null : null,
       error: openAIOAuthFlow.status === 'error' ? openAIOAuthFlow.error ?? null : null,
       completedAt: openAIOAuthFlow.completedAt ?? null,
+    });
+  });
+
+  app.get('/api/local-config/gemini-oauth/status', async (_req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(404).json({ error: 'Settings API unavailable in production.' });
+    }
+
+    const credentials = await loadGeminiCredentials();
+    res.json({
+      configured: Boolean(credentials),
+      email: credentials?.email ?? null,
+      expiresAt: credentials?.expires_at ?? null,
     });
   });
 

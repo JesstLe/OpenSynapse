@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { analyzeKnowledgeGaps } from '../services/gemini';
 import { Brain, Zap, TrendingUp, CheckCircle2, AlertCircle, Calendar, Download, Loader2, BrainCircuit } from 'lucide-react';
-import { Note, Flashcard } from '../types';
+import { Note, Flashcard, ChatSession } from '../types';
 import { cn } from '../lib/utils';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -14,11 +14,13 @@ import { saveAs } from 'file-saver';
 interface DashboardViewProps {
   notes: Note[];
   flashcards: Flashcard[];
+  chatSessions: ChatSession[];
   onStartBreakthrough: (tag: string, weakPoints: string[]) => void;
 }
 
-export default function DashboardView({ notes, flashcards, onStartBreakthrough }: DashboardViewProps) {
+export default function DashboardView({ notes, flashcards, chatSessions, onStartBreakthrough }: DashboardViewProps) {
   const [isExporting, setIsExporting] = React.useState(false);
+  const [analyzingTag, setAnalyzingTag] = React.useState<string | null>(null);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -66,7 +68,8 @@ ${flashcards
       setIsExporting(false);
     }
   };
-  // 1. Knowledge Growth Data (Notes per day for last 7 days)
+
+  // 1. Knowledge Growth Data
   const growthData = React.useMemo(() => {
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
@@ -75,7 +78,7 @@ ${flashcards
     });
 
     return last7Days.map(date => ({
-      date: date.slice(5), // MM-DD
+      date: date.slice(5),
       count: notes.filter(n => {
         const noteDate = new Date(n.createdAt).toISOString().split('T')[0];
         return noteDate <= date;
@@ -83,13 +86,12 @@ ${flashcards
     }));
   }, [notes]);
 
-  // 2. Review Performance (Simplified)
+  // 2. Review Performance
   const reviewStats = React.useMemo(() => {
     const total = flashcards.length;
     const due = flashcards.filter(c => c.nextReview <= Date.now()).length;
     const learned = flashcards.filter(c => c.state > 0).length;
     
-    // Cognitive Load Metric: (Due Cards * Avg Difficulty) / 10
     const avgDifficulty = flashcards.length > 0 
       ? flashcards.reduce((acc, c) => acc + c.difficulty, 0) / flashcards.length 
       : 0;
@@ -100,7 +102,7 @@ ${flashcards
 
   // 3. Difficulty Distribution
   const difficultyData = React.useMemo(() => {
-    const dist = [0, 0, 0, 0, 0]; // 1-2, 3-4, 5-6, 7-8, 9-10
+    const dist = [0, 0, 0, 0, 0];
     flashcards.forEach(c => {
       const idx = Math.min(4, Math.floor((c.difficulty - 1) / 2));
       if (idx >= 0) dist[idx]++;
@@ -126,7 +128,6 @@ ${flashcards
           tagStats[tag].count++;
           tagStats[tag].totalDifficulty += c.difficulty;
           if (c.nextReview <= Date.now()) tagStats[tag].dueCount++;
-          // Collect cards that are difficult or failed (state 3 is relearning)
           if (c.difficulty > 7 || c.state === 3) {
             tagStats[tag].failedCards.push(c);
           }
@@ -140,13 +141,51 @@ ${flashcards
         avgDifficulty: stats.totalDifficulty / stats.count,
         dueCount: stats.dueCount,
         score: (stats.totalDifficulty / stats.count) * (stats.dueCount + 1),
-        failedCards: stats.failedCards.slice(0, 5) // Limit to 5 for analysis
+        failedCards: stats.failedCards.slice(0, 5)
       }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
   }, [flashcards, notes]);
 
-  const [analyzingTag, setAnalyzingTag] = React.useState<string | null>(null);
+  // 5. Activity Calendar Logic (Last 12 weeks)
+  const activityData = React.useMemo(() => {
+    const data: Record<string, number> = {};
+    const processDate = (ts: number | string | undefined) => {
+      if (!ts) return;
+      const d = new Date(ts).toISOString().split('T')[0];
+      data[d] = (data[d] || 0) + 1;
+    };
+    
+    notes.forEach(n => processDate(n.createdAt));
+    chatSessions.forEach(s => processDate(s.updatedAt));
+    flashcards.filter(f => f.lastReview > 0).forEach(f => processDate(f.lastReview));
+    
+    return data;
+  }, [notes, flashcards, chatSessions]);
+
+  const activityCalendar = React.useMemo(() => {
+    const weeks: { date: Date; count: number; dateStr: string }[][] = [];
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - 11 * 7); // Show 12 weeks including current
+    startDate.setDate(startDate.getDate() - startDate.getDay());
+
+    for (let w = 0; w < 12; w++) {
+      const week: { date: Date; count: number; dateStr: string }[] = [];
+      for (let d = 0; d < 7; d++) {
+        const currentDate = new Date(startDate);
+        currentDate.setDate(startDate.getDate() + w * 7 + d);
+        const dateStr = currentDate.toISOString().split('T')[0];
+        week.push({
+          date: currentDate,
+          count: activityData[dateStr] || 0,
+          dateStr,
+        });
+      }
+      weeks.push(week);
+    }
+    return weeks;
+  }, [activityData]);
 
   const handleStartBreakthroughWithAnalysis = async (tag: string, cards: Flashcard[]) => {
     setAnalyzingTag(tag);
@@ -375,34 +414,70 @@ ${flashcards
           </div>
         </div>
 
-        {/* Daily Activity (Placeholder for now) */}
+        {/* Learning Activity (GitHub Style) */}
         <div className="bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-6 md:p-8 shadow-sm">
           <div className="flex items-center justify-between mb-8">
-            <h3 className="font-bold text-base md:text-lg flex items-center gap-2">
+            <h3 className="font-bold text-base md:text-lg flex items-center gap-2 text-text-main">
               <Calendar size={18} className="text-green-500" />
               学习活跃度
             </h3>
-          </div>
-          <div className="grid grid-cols-7 gap-1 md:gap-2">
-            {Array.from({ length: 28 }).map((_, i) => (
-              <div 
-                key={i} 
-                className={cn(
-                  "aspect-square rounded-sm md:rounded-md border border-border-main",
-                  Math.random() > 0.7 ? "bg-green-500/40" : Math.random() > 0.4 ? "bg-green-500/20" : "bg-secondary"
-                )}
-              />
-            ))}
-          </div>
-          <div className="mt-4 flex items-center justify-between text-[10px] text-text-muted font-bold uppercase tracking-widest opacity-60">
-            <span>较少</span>
-            <div className="flex gap-1">
-              <div className="w-2 h-2 rounded-sm bg-tertiary" />
-              <div className="w-2 h-2 rounded-sm bg-green-500/20" />
-              <div className="w-2 h-2 rounded-sm bg-green-500/40" />
-              <div className="w-2 h-2 rounded-sm bg-green-500/60" />
+            <div className="flex items-center gap-2 text-[10px] text-text-muted font-bold uppercase tracking-widest opacity-60">
+              <span>较少</span>
+              <div className="flex gap-1">
+                <div className="w-2.5 h-2.5 rounded-sm bg-secondary" />
+                <div className="w-2.5 h-2.5 rounded-sm bg-green-500/20" />
+                <div className="w-2.5 h-2.5 rounded-sm bg-green-500/40" />
+                <div className="w-2.5 h-2.5 rounded-sm bg-green-500/60" />
+                <div className="w-2.5 h-2.5 rounded-sm bg-green-500/80" />
+              </div>
+              <span>较多</span>
             </div>
-            <span>较多</span>
+          </div>
+          
+          <div className="flex gap-3">
+            {/* Day Labels */}
+            <div className="grid grid-rows-7 gap-1 md:gap-2 text-[8px] font-black text-text-muted uppercase pt-5">
+              <div className="h-2.5 md:h-3"></div>
+              <div className="h-2.5 md:h-3">Mon</div>
+              <div className="h-2.5 md:h-3"></div>
+              <div className="h-2.5 md:h-3">Wed</div>
+              <div className="h-2.5 md:h-3"></div>
+              <div className="h-2.5 md:h-3">Fri</div>
+              <div className="h-2.5 md:h-3"></div>
+            </div>
+            
+            <div className="flex-1 overflow-x-auto scrollbar-hide">
+              {/* Month Labels */}
+              <div className="flex mb-2 text-[8px] font-black text-text-muted uppercase">
+                {activityCalendar.map((week, i) => {
+                  const firstDay = week[0].date;
+                  const showMonth = i === 0 || (firstDay.getDate() <= 7 && i > 0);
+                  return (
+                    <div key={i} className="flex-1 min-w-[14px]">
+                      {showMonth ? firstDay.toLocaleString('default', { month: 'short' }) : ''}
+                    </div>
+                  );
+                })}
+              </div>
+              
+              <div className="grid grid-flow-col grid-rows-7 gap-1 md:gap-2">
+                {activityCalendar.map((week) => 
+                  week.map((day) => (
+                    <div 
+                      key={day.dateStr} 
+                      title={`${day.dateStr}: ${day.count} 次活动`}
+                      className={cn(
+                        "aspect-square w-2.5 h-2.5 md:w-3 md:h-3 rounded-sm md:rounded-md border border-border-main transition-all duration-300 hover:scale-125 hover:z-10",
+                        day.count === 0 ? "bg-secondary" :
+                        day.count <= 2 ? "bg-green-500/20" :
+                        day.count <= 5 ? "bg-green-500/40" :
+                        day.count <= 10 ? "bg-green-500/60" : "bg-green-500/80"
+                      )}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

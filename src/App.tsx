@@ -731,6 +731,7 @@ export default function App() {
             <DashboardView 
               notes={notes} 
               flashcards={flashcards} 
+              chatSessions={chatSessions}
               onStartBreakthrough={handleStartBreakthrough}
             />
           )}

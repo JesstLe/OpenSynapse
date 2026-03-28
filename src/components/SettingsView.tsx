@@ -120,6 +120,7 @@ export default function SettingsView({
 }: SettingsViewProps) {
   const [providerStatus, setProviderStatus] = useState<Record<string, ProviderStatus>>({});
   const [openAIOAuthStatus, setOpenAIOAuthStatus] = useState<OpenAIOAuthStatus | null>(null);
+  const [geminiOAuthStatus, setGeminiOAuthStatus] = useState<{ configured: boolean; email: string | null } | null>(null);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -149,29 +150,30 @@ export default function SettingsView({
   const isProviderAuthenticated = useCallback((providerId: string): boolean => {
     const userKey = userApiKeys?.[providerId]?.apiKey;
     if (userKey) return true;
-    
+
     if (providerId === 'gemini') {
       const geminiKeyConfigured = providerStatus['GEMINI_API_KEY']?.configured;
-      return geminiKeyConfigured || false;
+      const geminiOAuthConfigured = geminiOAuthStatus?.configured;
+      return geminiKeyConfigured || geminiOAuthConfigured || false;
     }
-    
+
     if (providerId === 'openai') {
       const openaiKeyConfigured = providerStatus['OPENAI_API_KEY']?.configured;
       const openaiOAuthConfigured = openAIOAuthStatus?.configured;
       return openaiKeyConfigured || openaiOAuthConfigured || false;
     }
-    
+
     const envVarMap: Record<string, string> = {
       'minimax': 'MINIMAX_API_KEY',
       'zhipu': 'ZHIPU_API_KEY',
       'moonshot': 'MOONSHOT_API_KEY',
     };
-    
+
     const envVar = envVarMap[providerId];
     if (!envVar) return false;
-    
+
     return providerStatus[envVar]?.configured || false;
-  }, [providerStatus, openAIOAuthStatus, userApiKeys]);
+  }, [providerStatus, openAIOAuthStatus, geminiOAuthStatus, userApiKeys]);
 
   const structuredModelOptions = useMemo(
     () => AI_MODEL_OPTIONS.filter((option) => {
@@ -195,9 +197,10 @@ export default function SettingsView({
     setIsLoading(true);
     setError(null);
     try {
-      const [providerResponse, openAIOAuthResponse] = await Promise.all([
+      const [providerResponse, openAIOAuthResponse, geminiOAuthResponse] = await Promise.all([
         fetch('/api/local-config/providers'),
         fetch('/api/local-config/openai-oauth/status'),
+        fetch('/api/local-config/gemini-oauth/status'),
       ]);
 
       if (!providerResponse.ok) {
@@ -206,6 +209,9 @@ export default function SettingsView({
       if (!openAIOAuthResponse.ok) {
         throw new Error(await openAIOAuthResponse.text());
       }
+      if (!geminiOAuthResponse.ok) {
+        throw new Error(await geminiOAuthResponse.text());
+      }
 
       const providerPayload = await providerResponse.json();
       const nextStatus = Object.fromEntries(
@@ -213,6 +219,7 @@ export default function SettingsView({
       );
       setProviderStatus(nextStatus);
       setOpenAIOAuthStatus(await openAIOAuthResponse.json());
+      setGeminiOAuthStatus(await geminiOAuthResponse.json());
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
