@@ -36,7 +36,12 @@ import {
 import { Note, Flashcard, ChatSession, Persona } from '../types';
 import { DEFAULT_PERSONA_ID } from '../lib/personas';
 import { cn } from '../lib/utils';
-import { User } from 'firebase/auth';
+interface User {
+  id: string;
+  email?: string;
+  name?: string;
+  image?: string;
+}
 import {
   getUserApiKeys,
   saveUserApiKey,
@@ -219,12 +224,7 @@ export default function SettingsView({
     if (includeJsonContentType) {
       headers['Content-Type'] = 'application/json';
     }
-
-    const token = await user?.getIdToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
+    // better-auth uses session cookies automatically
     return headers;
   }, [user]);
 
@@ -595,7 +595,7 @@ export default function SettingsView({
       setError('请先登录');
       return;
     }
-    const uid = user.uid;
+    const uid = user.id;
     const url = provider === 'wechat'
       ? `/auth/wechat/start?action=link&currentUid=${uid}`
       : provider === 'qq'
@@ -1190,7 +1190,7 @@ export default function SettingsView({
                       </div>
                       <div>
                         <h4 className="font-bold text-text-main">Google 账号</h4>
-                        <p className="text-xs text-text-sub">{user.email || user.displayName || '已登录'}</p>
+                        <p className="text-xs text-text-sub">{user.email || user.name || '已登录'}</p>
                       </div>
                     </div>
                     <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-3 py-1 text-xs font-bold text-green-400">
