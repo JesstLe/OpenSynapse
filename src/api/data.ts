@@ -214,9 +214,13 @@ router.post("/flashcards/:id/review", requireAuth(async (req, res, userId) => {
     if (existing.userId !== userId) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const { nextReview, repetitions, ...reviewData } = req.body;
+    const { stability, difficulty, elapsedDays, scheduledDays, state, nextReview, repetitions } = req.body;
     const updatePayload: any = {
-      ...reviewData,
+      stability,
+      difficulty,
+      elapsedDays,
+      scheduledDays,
+      state,
       lastReview: new Date(),
     };
     if (nextReview !== undefined) updatePayload.due = toDbDate(nextReview);

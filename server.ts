@@ -17,12 +17,13 @@ import {
 import { loadCredentials as loadGeminiCredentials } from './src/lib/oauth';
 
 function validateEnv() {
-  const required = ['DATABASE_URL', 'JWT_SECRET'];
+  const required = ['DATABASE_URL', 'BETTER_AUTH_SECRET'];
   const missing = required.filter(key => !process.env[key]);
   if (missing.length > 0) {
     console.error('❌ Missing required environment variables:');
     missing.forEach(key => console.error(`   - ${key}`));
     console.error('\nPlease set these in your .env.local file');
+    console.error('Note: BETTER_AUTH_SECRET is used by better-auth for session signing');
     process.exit(1);
   }
 
@@ -33,11 +34,17 @@ function validateEnv() {
   ];
 
   const configured = socialProviders.filter(p => process.env[p.id] && process.env[p.secret]);
-  const partial = socialProviders.filter(p => process.env[p.id] && !process.env[p.secret]);
+  const missingId = socialProviders.filter(p => !process.env[p.id] && process.env[p.secret]);
+  const missingSecret = socialProviders.filter(p => process.env[p.id] && !process.env[p.secret]);
 
-  if (partial.length > 0) {
-    console.warn('⚠️  Incomplete social provider configuration:');
-    partial.forEach(p => console.warn(`   - ${p.name}: missing ${p.secret}`));
+  if (missingId.length > 0) {
+    console.warn('⚠️  Social providers with SECRET but no CLIENT_ID:');
+    missingId.forEach(p => console.warn(`   - ${p.name}: missing ${p.id}`));
+  }
+
+  if (missingSecret.length > 0) {
+    console.warn('⚠️  Social providers with CLIENT_ID but no SECRET:');
+    missingSecret.forEach(p => console.warn(`   - ${p.name}: missing ${p.secret}`));
   }
 
   if (configured.length === 0) {
@@ -289,18 +296,24 @@ async function startServer() {
   app.use('/api', dataRouter);
 
   app.get("/api/data", async (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(404).json({ error: "Not available in production" });
+    }
     const data = await getData();
     res.json(data);
   });
 
   app.post("/api/sync", async (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(404).json({ error: "Not available in production" });
+    }
     const { note, flashcards } = req.body;
     if (!note || !flashcards) return res.status(400).json({ error: "Invalid data" });
-    
+
     const data = await getData();
     data.notes.unshift(note);
     data.flashcards.push(...flashcards);
-    
+
     await saveData(data);
     console.log(`[CLI] Synced new note: ${note.title}`);
     res.json({ success: true });
