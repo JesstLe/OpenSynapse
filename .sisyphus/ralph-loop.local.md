@@ -3,8 +3,8 @@ active: true
 iteration: 2
 completion_promise: "VERIFIED"
 initial_completion_promise: "DONE"
-verification_attempt_id: "ce244dd6-b486-44b4-a5cd-7573117a0ce0"
-verification_session_id: "ses_2cb6addb8ffebHcqQYp5XqLNWM"
+verification_attempt_id: "4a352322-3467-40ee-b632-4b6bc495b758"
+verification_session_id: "ses_2cb661b68ffeDH3KLLnqwV4re7"
 started_at: "2026-03-28T13:03:29.270Z"
 session_id: "ses_2cc7b3abefferDKetD5H01x5L4"
 ultrawork: true
