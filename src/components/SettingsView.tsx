@@ -106,6 +106,13 @@ const PROVIDER_SETTINGS = [
   },
 ];
 
+const LOCAL_CONFIG_KEYS = new Set(
+  PROVIDER_SETTINGS.flatMap((item) => [
+    item.envVar,
+    ...(item.baseUrlEnvVar ? [item.baseUrlEnvVar] : []),
+  ])
+);
+
 interface SettingsViewProps {
   onBackToChat?: () => void;
   customPersonas?: Persona[];
@@ -202,10 +209,24 @@ export default function SettingsView({
     [providerStatus, userApiKeys]
   );
 
-  const hasUnsavedChanges = useMemo(
-    () => Object.values(draftValues).some((value) => value.trim().length > 0),
+  const hasUnsavedLocalConfigChanges = useMemo(
+    () => Object.entries(draftValues).some(([key, value]) => LOCAL_CONFIG_KEYS.has(key) && value.trim().length > 0),
     [draftValues]
   );
+
+  const getAuthorizedHeaders = useCallback(async (includeJsonContentType = false) => {
+    const headers: Record<string, string> = {};
+    if (includeJsonContentType) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    const token = await user?.getIdToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    return headers;
+  }, [user]);
 
   const loadStatus = useCallback(async () => {
     setIsLoading(true);
@@ -280,8 +301,15 @@ export default function SettingsView({
 
   const handleSave = async () => {
     const updates = Object.fromEntries(
-      Object.entries(draftValues).map(([key, value]) => [key, value.trim()])
+      Object.entries(draftValues)
+        .filter(([key]) => LOCAL_CONFIG_KEYS.has(key))
+        .map(([key, value]) => [key, value.trim()])
     );
+
+    if (Object.keys(updates).length === 0) {
+      setFeedback('当前没有需要保存的全局配置。');
+      return;
+    }
 
     setIsSaving(true);
     setFeedback(null);
@@ -517,16 +545,18 @@ export default function SettingsView({
     if (!user) return;
     setIsLoadingProviders(true);
     try {
-      const response = await fetch('/api/account/connected-providers');
+      const response = await fetch('/api/account/connected-providers', {
+        headers: await getAuthorizedHeaders(),
+      });
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
-      setConnectedProviders(data.providers || []);
+      setConnectedProviders(Array.isArray(data.accounts) ? data.accounts.map((item: { provider?: string }) => item.provider || '') : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取账号绑定状态失败');
     } finally {
       setIsLoadingProviders(false);
     }
-  }, [user]);
+  }, [getAuthorizedHeaders, user]);
 
   useEffect(() => {
     if (user) {
@@ -547,8 +577,8 @@ export default function SettingsView({
     try {
       const response = await fetch('/api/account/unlink-provider', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider }),
+        headers: await getAuthorizedHeaders(true),
+        body: JSON.stringify({ provider, providerUserId: null }),
       });
       if (!response.ok) throw new Error(await response.text());
       setFeedback(`${provider === 'wechat' ? '微信' : provider === 'qq' ? 'QQ' : provider}账号已解绑`);
@@ -1055,9 +1085,12 @@ export default function SettingsView({
               const userKey = userApiKeys?.[item.providerId];
               const isOverridden = Boolean(userKey?.apiKey);
 
+              const draftEnvValue = draftValues[item.envVar] || '';
+              const draftEnvBaseUrl = item.baseUrlEnvVar ? (draftValues[item.baseUrlEnvVar] || '') : '';
+
               return (
                 <div key={item.envVar} className={`rounded-2xl border border-border-main bg-secondary/30 p-4 ${isOverridden ? 'opacity-60' : ''}`}>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <h4 className="font-bold">{item.title}</h4>
                       {envStatus?.configured ? (
@@ -1082,6 +1115,41 @@ export default function SettingsView({
                       <code>{item.envVar}</code>
                       {envStatus?.valuePreview && (
                         <span className="ml-2">{envStatus.valuePreview}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    <input
+                      type="password"
+                      value={draftEnvValue}
+                      onChange={(e) =>
+                        setDraftValues((prev) => ({ ...prev, [item.envVar]: e.target.value }))
+                      }
+                      placeholder={envStatus?.configured ? '输入新全局 Key 以覆盖当前配置' : item.placeholder}
+                      disabled={isSaving}
+                      className="w-full rounded-2xl border border-border-main bg-secondary px-4 py-3 text-sm text-text-main placeholder:text-text-muted/40 outline-none focus:border-accent/40 disabled:opacity-50"
+                    />
+                    {item.baseUrlEnvVar && (
+                      <input
+                        type="text"
+                        value={draftEnvBaseUrl}
+                        onChange={(e) =>
+                          setDraftValues((prev) => ({ ...prev, [item.baseUrlEnvVar!]: e.target.value }))
+                        }
+                        placeholder={`自定义全局上游地址 (默认: ${AI_PROVIDERS[item.providerId].baseUrl || '官方'})`}
+                        disabled={isSaving}
+                        className="w-full rounded-2xl border border-border-main bg-secondary px-4 py-3 text-sm text-text-main placeholder:text-text-muted/40 outline-none focus:border-accent/40 disabled:opacity-50"
+                      />
+                    )}
+                    <div className="flex items-center justify-end gap-2">
+                      {envStatus?.configured && (
+                        <button
+                          onClick={() => void handleClear(item.envVar)}
+                          disabled={isSaving}
+                          className="px-4 py-2 rounded-full bg-tertiary text-text-main text-sm font-bold hover:bg-secondary transition-colors disabled:opacity-50"
+                        >
+                          清空全局 Key
+                        </button>
                       )}
                     </div>
                   </div>
@@ -1215,7 +1283,7 @@ export default function SettingsView({
         <div className="flex justify-end">
           <button
             onClick={() => void handleSave()}
-            disabled={isSaving || isLoading || !hasUnsavedChanges}
+            disabled={isSaving || isLoading || !hasUnsavedLocalConfigChanges}
             className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-3 font-bold text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
