@@ -10,7 +10,7 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
 - **多导师人格系统** - 计算机、数学、法学、金融等专业导师，每种人格有独特的教学风格
 - **AI 学习会话** - 流式对话、思考过程展示、停止/重新生成功能
 - **知识提炼** - 从对话或文档自动提取结构化笔记和闪卡
-- **对话导入** - 支持 JSON、Markdown、纯文本格式导入历史对话
+- **对话导入** - 支持 JSON、Markdown、纯文本格式导入历史对话，新增Gemini网页导出格式支持
 - **多 AI 提供商** - 支持 Gemini、OpenAI、MiniMax、智谱 GLM、Moonshot Kimi
 - **FSRS 复习** - 基于间隔重复算法的科学复习系统
 - **知识图谱** - D3.js 可视化展示概念关联
@@ -39,6 +39,7 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
   - 模型切换（多提供商支持）
   - 图片 / PDF / URL 入口
   - 会话保存与历史
+  - LaTeX数学公式渲染支持
 - `src/components/DashboardView.tsx`
   - 仪表盘与数据概览
 - `src/components/GraphView.tsx`
@@ -138,8 +139,9 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
 | Code Assist 请求 | `src/lib/codeAssist.ts` | `cloudcode-pa.googleapis.com` |
 | 模型配置 | `src/lib/aiModels.ts` | 多提供商模型列表与 fallback 策略 |
 | 人格系统 | `src/lib/personas.ts` | 多导师人格定义与隐藏人格机制 |
-| 对话导入 | `src/services/importParsers.ts` | JSON/Markdown/TXT 解析与去重 |
+| 对话导入 | `src/services/importParsers.ts` | JSON/Markdown/TXT 解析与去重，支持Gemini网页导出格式 |
 | 导入弹窗 | `src/components/ImportDialog.tsx` | 文件拖拽、粘贴、预览、导入 |
+| 数学公式 | `src/components/ChatView.tsx` | LaTeX数学公式渲染（remark-math + rehype-katex） |
 | 设置中心 | `src/components/SettingsView.tsx` | 提供商配置、人格管理、主题切换 |
 | CLI 认证 | `scripts/cli-auth.ts` | `auth login/status/logout` |
 | CLI 导入 | `scripts/cli.ts` | 文件解析后同步到后端、批量导入 |
@@ -359,6 +361,38 @@ CLI 能正常，不代表 Web 聊天一定稳。
 Firestore 不接受 `undefined` 字段。  
 保存聊天会话前如果结构里混入 `undefined`，写入会失败。
 
+### Firestore Security Rules
+
+安全规则文件位于 `config/firestore.rules`。部署方法：
+
+```bash
+# 安装 Firebase CLI
+npm install -g firebase-tools
+
+# 登录
+firebase login
+
+# 部署规则
+firebase deploy --only firestore:rules
+```
+
+**注意**：首次部署后可能需要等待几分钟才能生效。如果客户端遇到权限错误，尝试：
+1. 清除浏览器缓存
+2. 重新登录
+3. 检查规则是否正确部署到对应的数据库ID
+
+详细部署记录见 `docs/firestore-rules-deployment.md`。
+
+### Session Import Compatibility
+
+导入对话时可能遇到权限错误（`Missing or insufficient permissions`）。系统已实现多重兼容策略：
+
+1. **新规则优先**：尝试使用新的安全规则保存
+2. **降级策略**：如失败，尝试使用旧规则格式
+3. **服务端兜底**：最后通过 `/api/chat-sessions` 端点由服务端保存
+
+相关实现在 `src/App.tsx` 的 `handleSaveSession` 和服务器端 `server.ts`。
+
 ### Multi-Provider Limitations
 
 非 Gemini provider（OpenAI/MiniMax/智谱/Moonshot）：
@@ -441,6 +475,10 @@ npx tsx cli.ts ./path/to/file.txt
 
 - `README.md`
   - 项目概览与快速开始
+- `docs/auth/environment-variables.md`
+  - 环境变量配置指南（微信/QQ/商业部署）
+- `docs/firestore-rules-deployment.md`
+  - Firestore安全规则部署记录
 - `docs/OAUTH_USAGE.md`
   - 快速使用认证说明
 - `docs/gemini-cli-code-assist-auth-tutorial.md`
@@ -462,7 +500,11 @@ npx tsx cli.ts ./path/to/file.txt
 - FSRS 逻辑在 `src/services/fsrs.ts`
 - 知识图谱在 `src/components/GraphView.tsx`
 - 多导师人格在 `src/lib/personas.ts`
-- 对话导入在 `src/components/ImportDialog.tsx`
+- 对话导入在 `src/components/ImportDialog.tsx`，支持 JSON/Markdown/TXT/Gemini网页导出
+- 数学公式渲染在 `src/components/ChatView.tsx`（remark-math + rehype-katex）
 - 多提供商网关在 `src/lib/providerGateway.ts`
 - Web 主数据路径为 Firestore
 - CLI 仍保留 `/api/sync` 兼容导入链路
+- Firestore 安全规则在 `config/firestore.rules`
+- 多提供商认证在 `src/api/auth.ts`（WeChat/QQ OAuth）
+- 用户级 API Key 在 `src/services/userApiKeyService.ts`
