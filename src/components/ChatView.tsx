@@ -163,10 +163,10 @@ export default function ChatView({
       handleStartBreakthrough();
     } else if (messages.length === 0) {
       setMessages([
-        { role: 'model', text: "你好！我是你的计算机科学导师。今天我们要学习什么？我可以帮你把新概念与你已有的知识连接起来。" }
+        { role: 'model', text: `你好！我是你的${currentPersona.name}。今天我们要学习什么？我可以帮你把新概念与你已有的知识连接起来。` }
       ]);
     }
-  }, [breakthroughConfig]);
+  }, [breakthroughConfig, currentPersona]);
 
   const handleStartBreakthrough = async () => {
     if (!breakthroughConfig) return;
