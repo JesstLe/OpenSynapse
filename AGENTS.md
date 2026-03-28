@@ -15,10 +15,10 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
 - **FSRS 复习** - 基于间隔重复算法的科学复习系统
 - **知识图谱** - D3.js 可视化展示概念关联
 - **明暗主题** - 支持亮色/暗色模式切换
-- **Firebase 云同步** - Auth + Firestore 多端实时同步
+- **自托管架构** - better-auth + PostgreSQL + Chroma，完全独立于 Firebase
 - **CLI 工具** - 命令行导入、多提供商支持、批量处理
 
-当前项目已经不再是纯 `data.json` 本地存储架构。Web 主路径以 Firebase 为主，CLI 仍保留本地 `/api/sync` 兼容链路。
+**[MIGRATION COMPLETE]** 项目已从 Firebase 完全迁移到自托管架构。所有数据存储在 PostgreSQL，认证使用 better-auth，向量数据库使用 Chroma。
 
 ---
 
@@ -28,8 +28,8 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
 
 - `src/App.tsx`
   - 应用主入口
-  - 登录态管理
-  - Firestore 订阅
+  - 登录态管理（better-auth）
+  - PostgreSQL 数据同步
   - 主视图切换
   - 主题状态管理（明暗切换）
 - `src/components/ChatView.tsx`
@@ -99,10 +99,12 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
 
 ### Data Layer
 
-- `src/firebase.ts`
-  - Firebase 配置
-- `firestore.rules`
-  - Firestore 规则
+- `src/db/`
+  - PostgreSQL 数据库配置和 Drizzle ORM schema
+- `src/db/index.ts`
+  - 数据库连接池配置（生产级设置）
+- `src/repositories/`
+  - 数据访问层（notes, flashcards, chat, personas, api-keys）
 - `src/types.ts`
   - Note / Flashcard / ChatSession 等类型
 
@@ -123,8 +125,10 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
 
 - `server.ts`
   - Express + Vite 开发服务器
-  - `/api/ai/*`
-  - `/api/sync`
+  - better-auth 中间件集成
+  - `/api/ai/*` - AI 路由（需认证）
+  - `/api/data/*` - 数据 CRUD 路由
+  - 社交登录 OAuth 回调处理
 
 ---
 
@@ -148,7 +152,7 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
 | 知识提炼模型 | `src/lib/aiModels.ts` | 用户可配置结构化输出模型（独立于对话模型） |
 | CLI 认证 | `scripts/cli-auth.ts` | `auth login/status/logout` |
 | CLI 导入 | `scripts/cli.ts` | 文件解析后同步到后端、批量导入 |
-| Firestore 保存 | `src/App.tsx` | 会话、笔记、闪卡写入 |
+| PostgreSQL 保存 | `src/App.tsx` | 会话、笔记、闪卡写入 |
 
 ---
 
@@ -175,91 +179,92 @@ OAuth 本地回调地址：
 
 ### Multi-Provider Authentication
 
-OpenSynapse now supports three login providers with complete data isolation:
+OpenSynapse uses better-auth for authentication with support for social login providers:
 
-- **Google** - Firebase Auth (existing)
-- **WeChat** - OAuth 2.0 via WeChat Open Platform (new)
-- **QQ** - OAuth 2.0 via QQ Connect (new)
+- **Google** - OAuth 2.0
+- **GitHub** - OAuth 2.0
+- **Discord** - OAuth 2.0
 
 ### Architecture
 
 ```
 User clicks login → Frontend redirects to provider OAuth
                            ↓
-                Provider callback to /auth/{provider}/callback
+                Provider callback to /api/auth/{provider}/callback
                            ↓
-           Server exchanges code for access_token + openid
+           better-auth handles OAuth flow
                            ↓
-           Find or create user in Firestore (by providerUserId)
+           User created in PostgreSQL (better-auth tables)
                            ↓
-           Generate Firebase Custom Token
+           Session cookie set
                            ↓
-           Redirect to /auth/complete?token=...
-                           ↓
-           Frontend calls signInWithCustomToken(auth, token)
-                           ↓
-           User is now authenticated with Firebase
+           User is now authenticated
 ```
 
 ### Data Isolation
 
 Each user has completely independent data:
 
-- **Firestore collections per user:**
-  - `users/{uid}` - User profile
-  - `account_secrets/{uid}` - API keys and credentials
-  - `notes/{id}` (with userId field) - Personal notes
-  - `flashcards/{id}` (with userId field) - Personal flashcards
-  - `chat_sessions/{id}` (with userId field) - Personal chat sessions
-  - `custom_personas/{id}` (with userId field) - Personal personas
+- **PostgreSQL tables per user:**
+  - `users` - User profile (managed by better-auth)
+  - `accounts` - Social provider accounts
+  - `sessions` - Active sessions
+  - `notes` (with userId field) - Personal notes
+  - `flashcards` (with userId field) - Personal flashcards
+  - `chat_sessions` (with userId field) - Personal chat sessions
+  - `custom_personas` (with userId field) - Personal personas
 
-- **Account binding:** One Firebase user can bind multiple login methods
-  - Primary key is always Firebase UID
-  - `connected_accounts` collection maps provider IDs to Firebase UID
+- **Account binding:** One user can bind multiple login methods
+  - Primary key is user ID from better-auth
+  - `accounts` table maps provider IDs to user
 
 ### Key Files
 
 | Component | File | Description |
 |-----------|------|-------------|
 | Login UI | `src/components/auth/LoginSelection.tsx` | Multi-provider login selection |
-| OAuth Callback | `src/components/auth/AuthCallback.tsx` | Handle Firebase custom token |
-| Auth Routes | `src/api/auth.ts` | WeChat/QQ OAuth endpoints |
-| User Service | `src/lib/userService.ts` | User management, account linking |
-| Firebase Admin | `src/lib/firebaseAdmin.ts` | Custom token generation |
+| Auth Config | `src/auth/server.ts` | better-auth server configuration |
+| Auth Client | `src/auth/client.ts` | better-auth client utilities |
+| Auth Middleware | `src/api/auth-middleware.ts` | Route authentication middleware |
 | Account Binding | SettingsView section | Manage connected accounts |
 
 ### Environment Variables
 
 ```bash
-# WeChat Open Platform
-WECHAT_APP_ID=your_wechat_app_id
-WECHAT_APP_SECRET=your_wechat_app_secret
+# Better-Auth Secret (required)
+BETTER_AUTH_SECRET=your-super-secret-auth-key-minimum-32-chars
 
-# QQ Connect
-QQ_APP_ID=your_qq_app_id
-QQ_APP_SECRET=your_qq_app_secret
+# Google OAuth
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
 
-# Firebase Admin (for custom tokens)
-# Option 1: Service account JSON
-FIREBASE_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
-# Option 2: Use application default credentials in GCP
+# GitHub OAuth
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
+
+# Discord OAuth
+DISCORD_CLIENT_ID=your_discord_client_id
+DISCORD_CLIENT_SECRET=your_discord_client_secret
+
+# Database (required)
+DATABASE_URL=postgresql://opensynapse:password@localhost:5432/opensynapse
 ```
 
 ---
 
 ## User-Level API Keys
 
-For commercial multi-tenant use, API keys are now stored per-user instead of globally.
+For commercial multi-tenant use, API keys are stored per-user in PostgreSQL.
 
 ### Storage
 
-- **Location:** Firestore `account_secrets/{uid}`
-- **Structure:** `{ geminiApiKey?, openaiApiKey?, minimaxApiKey?, ... }`
-- **Security:** Firestore rules restrict read/write to authenticated owner only
+- **Location:** PostgreSQL `api_keys` table
+- **Structure:** `{ id, userId, provider, key, createdAt }`
+- **Security:** Row-level isolation via userId filtering
 
 ### Priority
 
-1. User's personal API key (from Firestore)
+1. User's personal API key (from PostgreSQL)
 2. Global environment variable (fallback)
 3. OAuth token (for Gemini, if no API key)
 
@@ -267,7 +272,8 @@ For commercial multi-tenant use, API keys are now stored per-user instead of glo
 
 | Component | File | Description |
 |-----------|------|-------------|
-| API Key Service | `src/services/userApiKeyService.ts` | CRUD operations for user keys |
+| API Key Repository | `src/repositories/apiKey.repo.ts` | Database operations for API keys |
+| API Key Service | `src/services/userApiKeyService.ts` (client) / `.server.ts` (server) | CRUD operations |
 | Settings UI | `src/components/SettingsView.tsx` | Personal API key configuration |
 | Server Routes | `src/api/ai.ts` | Reads user key with env fallback |
 
@@ -388,15 +394,15 @@ firebase deploy --only firestore:rules
 
 详细部署记录见 `docs/firestore-rules-deployment.md`。
 
-### Session Import Compatibility
+### Session Persistence
 
-导入对话时可能遇到权限错误（`Missing or insufficient permissions`）。系统已实现多重兼容策略：
+聊天会话通过 REST API 保存到 PostgreSQL：
 
-1. **新规则优先**：尝试使用新的安全规则保存
-2. **降级策略**：如失败，尝试使用旧规则格式
-3. **服务端兜底**：最后通过 `/api/chat-sessions` 端点由服务端保存
+1. **前端调用** `dataApi.chatSessions.create()` 创建会话
+2. **服务端验证** JWT session 并写入数据库
+3. **数据隔离** 所有查询都过滤 userId
 
-相关实现在 `src/App.tsx` 的 `handleSaveSession` 和服务器端 `server.ts`。
+相关实现在 `src/App.tsx` 的 `handleSaveSession` 和 `src/api/data.ts`。
 
 ### Multi-Provider Limitations
 
@@ -516,11 +522,11 @@ npx tsx cli.ts ./path/to/file.txt
 - 对话导入在 `src/components/ImportDialog.tsx`，支持 JSON/Markdown/TXT/Gemini网页导出/ChatGPT导出/自定义格式
 - 数学公式渲染在 `src/components/ChatView.tsx`（remark-math + rehype-katex）
 - 多提供商网关在 `src/lib/providerGateway.ts`
-- Web 主数据路径为 Firestore
-- CLI 仍保留 `/api/sync` 兼容导入链路
-- Firestore 安全规则在 `config/firestore.rules`
-- 多提供商认证在 `src/api/auth.ts`（WeChat/QQ OAuth）
-- 用户级 API Key 在 `src/services/userApiKeyService.ts`
+- **Web 主数据路径为 PostgreSQL** (已迁移自 Firestore)
+- CLI 仍保留 `/api/sync` 兼容导入链路（仅开发模式）
+- 用户级 API Key 在 `src/repositories/apiKey.repo.ts` 和 `src/services/userApiKeyService.ts`
 - 知识提炼模型配置在 `SettingsView`，用户可独立选择结构化输出模型（对话模型 vs 知识提炼模型）
 - GPT-5.4 / GPT-5.3 系列模型已添加，支持通用版和 Codex 代码版
 - 流式聊天体验已完成，支持 SSE 实时显示和停止/重新生成
+- **认证系统已迁移到 better-auth** (已替换 Firebase Auth)
+- **向量数据库使用 Chroma** (本地，替代 Firebase Vector Search)
