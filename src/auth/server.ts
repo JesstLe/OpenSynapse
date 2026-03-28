@@ -10,6 +10,8 @@ export const auth = betterAuth({
 
   plugins: [bearer()],
 
+  trustedOrigins: ["http://localhost:3000", "http://localhost:3001"],
+
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
