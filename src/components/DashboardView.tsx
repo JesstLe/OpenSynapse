@@ -417,7 +417,7 @@ ${flashcards
         </div>
 
         {/* Learning Activity (GitHub Style) */}
-        <div ref={activityCardRef} className="bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-6 md:p-8 shadow-sm relative activity-chart-container overflow-hidden">
+        <div ref={activityCardRef} className="bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-6 md:p-8 shadow-sm relative activity-chart-container">
           <div className="flex items-center justify-between mb-8">
             <h3 className="font-bold text-base md:text-lg flex items-center gap-2 text-text-main">
               <Calendar size={18} className="text-green-500" />
@@ -512,7 +512,7 @@ ${flashcards
                 className="absolute z-50 max-w-[152px] md:max-w-[240px] px-3 py-2 bg-text-main text-bg-card text-[10px] rounded-lg shadow-xl pointer-events-none text-center"
                 style={{ 
                   left: hoveredDay.x, 
-                  top: hoveredDay.y - 12 - (window.innerWidth < 768 ? 40 : 50),
+                  top: Math.max(12, hoveredDay.y - 12 - (window.innerWidth < 768 ? 40 : 50)),
                   transform: 'translateX(-50%)' 
                 }}
               >

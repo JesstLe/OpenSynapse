@@ -191,15 +191,6 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     docsUrl: 'https://platform.openai.com/docs/models',
   },
   {
-    id: 'openai/gpt-5.4-codex',
-    provider: 'openai',
-    model: 'gpt-5.4-codex',
-    label: 'GPT-5.4 Codex',
-    description: 'GPT-5.4 Codex 优化版，专为代码与 agent 场景设计。',
-    lifecycle: 'stable',
-    docsUrl: 'https://github.com/openai/codex',
-  },
-  {
     id: 'openai/gpt-5.3',
     provider: 'openai',
     model: 'gpt-5.3',
@@ -321,7 +312,6 @@ export const MODEL_FALLBACKS: Record<string, string[]> = {
   'openai/gpt-5.1-codex': ['openai/gpt-5.1-codex-mini', 'openai/gpt-5-mini'],
   'openai/gpt-5.1-codex-mini': ['openai/gpt-5-mini'],
   'openai/gpt-5.4': ['openai/gpt-5.3', 'openai/gpt-5.2', 'openai/gpt-5.1', 'openai/gpt-5-mini'],
-  'openai/gpt-5.4-codex': ['openai/gpt-5.3-codex', 'openai/gpt-5.2-codex', 'openai/gpt-5.1-codex', 'openai/gpt-5-mini'],
   'openai/gpt-5.3': ['openai/gpt-5.2', 'openai/gpt-5.1', 'openai/gpt-5-mini'],
   'openai/gpt-5.3-codex': ['openai/gpt-5.2-codex', 'openai/gpt-5.1-codex', 'openai/gpt-5-mini'],
   'openai/gpt-5.2-pro': ['openai/gpt-5.2', 'openai/gpt-5-mini'],
