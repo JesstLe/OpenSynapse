@@ -146,9 +146,39 @@ export default function SettingsView({
   const [isLoadingProviders, setIsLoadingProviders] = useState(false);
   const [isUnlinking, setIsUnlinking] = useState<string | null>(null);
 
+  const isProviderAuthenticated = useCallback((providerId: string): boolean => {
+    const userKey = userApiKeys?.[providerId]?.apiKey;
+    if (userKey) return true;
+    
+    if (providerId === 'gemini') {
+      const geminiKeyConfigured = providerStatus['GEMINI_API_KEY']?.configured;
+      return geminiKeyConfigured || false;
+    }
+    
+    if (providerId === 'openai') {
+      const openaiKeyConfigured = providerStatus['OPENAI_API_KEY']?.configured;
+      const openaiOAuthConfigured = openAIOAuthStatus?.configured;
+      return openaiKeyConfigured || openaiOAuthConfigured || false;
+    }
+    
+    const envVarMap: Record<string, string> = {
+      'minimax': 'MINIMAX_API_KEY',
+      'zhipu': 'ZHIPU_API_KEY',
+      'moonshot': 'MOONSHOT_API_KEY',
+    };
+    
+    const envVar = envVarMap[providerId];
+    if (!envVar) return false;
+    
+    return providerStatus[envVar]?.configured || false;
+  }, [providerStatus, openAIOAuthStatus, userApiKeys]);
+
   const structuredModelOptions = useMemo(
-    () => AI_MODEL_OPTIONS.filter((option) => !option.model.toLowerCase().includes('embedding')),
-    []
+    () => AI_MODEL_OPTIONS.filter((option) => {
+      if (option.model.toLowerCase().includes('embedding')) return false;
+      return isProviderAuthenticated(option.provider);
+    }),
+    [isProviderAuthenticated]
   );
 
   const structuredModelLabel = useMemo(

@@ -165,10 +165,10 @@ ${flashcards
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto w-full space-y-6">
+    <div className="h-full overflow-y-auto p-4 md:p-6 max-w-6xl mx-auto w-full space-y-6 scrollbar-hide">
       <header className="mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Synapse 突触</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-text-main">Synapse 突触</h2>
           <p className="text-xs md:text-sm text-text-muted">实时监控你的知识网络与大脑负荷。</p>
         </div>
         <button
@@ -218,7 +218,7 @@ ${flashcards
         {/* Knowledge Growth Chart */}
         <div className="lg:col-span-2 bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-4 md:p-8 shadow-sm">
           <div className="flex items-center justify-between mb-8">
-            <h3 className="font-bold text-base md:text-lg flex items-center gap-2">
+            <h3 className="font-bold text-base md:text-lg flex items-center gap-2 text-text-main">
               <TrendingUp size={18} className="text-blue-500" />
               知识增长曲线
             </h3>
@@ -264,13 +264,13 @@ ${flashcards
         </div>
 
         {/* Cognitive Load Indicator */}
-        <div className="bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-6 md:p-8 flex flex-col items-center justify-center text-center shadow-sm">
-          <div className="mb-6">
-            <h3 className="font-bold text-base md:text-lg mb-1">认知负荷</h3>
-            <p className="text-[10px] md:text-xs text-text-muted">当前大脑处理压力</p>
+        <div className="bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-6 md:p-8 flex flex-col items-center justify-start text-center shadow-sm gap-6">
+          <div className="w-full">
+            <h3 className="font-bold text-base md:text-lg mb-1 text-text-main">认知负荷</h3>
+            <p className="text-[10px] md:text-xs text-text-muted font-medium">当前大脑处理压力</p>
           </div>
           
-          <div className="relative w-32 h-32 md:w-48 md:h-48 flex items-center justify-center">
+          <div className="relative w-32 h-32 md:w-48 md:h-48 flex items-center justify-center shrink-0">
             <svg className="w-full h-full transform -rotate-90">
               <circle
                 cx={window.innerWidth < 768 ? "64" : "96"}
@@ -304,19 +304,19 @@ ${flashcards
             </div>
           </div>
 
-          <div className="mt-8 w-full space-y-4">
+          <div className="w-full space-y-4">
             <div className="text-left">
-              <div className="text-[10px] text-text-muted uppercase font-black mb-3 tracking-widest">知识薄弱点 (Gap)</div>
+              <div className="text-[10px] text-text-muted uppercase font-black mb-3 tracking-widest opacity-60">知识薄弱点 (Gap)</div>
               <div className="space-y-2">
                 {knowledgeGaps.length === 0 ? (
-                  <div className="text-xs text-text-muted italic opacity-50">暂无明显薄弱环节</div>
+                  <div className="text-xs text-text-muted italic opacity-50 text-center py-4">暂无明显薄弱环节</div>
                 ) : (
                   knowledgeGaps.map(gap => (
-                    <div key={gap.tag} className="group/gap flex flex-col p-3 rounded-2xl bg-secondary border border-border-main hocus:border-accent/30 transition-all">
+                    <div key={gap.tag} className="group/gap flex flex-col p-3 rounded-2xl bg-secondary border border-border-main hocus:border-accent/30 transition-all shadow-sm">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-bold text-accent/80">#{gap.tag}</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-text-muted opacity-70">难度 {gap.avgDifficulty.toFixed(1)}</span>
+                          <span className="text-[10px] text-text-muted opacity-60 font-bold uppercase tracking-wider">难度 {gap.avgDifficulty.toFixed(1)}</span>
                         </div>
                       </div>
                       <button
