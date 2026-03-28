@@ -142,7 +142,8 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
 | 对话导入 | `src/services/importParsers.ts` | JSON/Markdown/TXT 解析与去重，支持Gemini网页导出格式 |
 | 导入弹窗 | `src/components/ImportDialog.tsx` | 文件拖拽、粘贴、预览、导入 |
 | 数学公式 | `src/components/ChatView.tsx` | LaTeX数学公式渲染（remark-math + rehype-katex） |
-| 设置中心 | `src/components/SettingsView.tsx` | 提供商配置、人格管理、主题切换 |
+| 设置中心 | `src/components/SettingsView.tsx` | 提供商配置、人格管理、主题切换、知识提炼模型配置 |
+| 知识提炼模型 | `src/lib/aiModels.ts` | 用户可配置结构化输出模型（独立于对话模型） |
 | CLI 认证 | `scripts/cli-auth.ts` | `auth login/status/logout` |
 | CLI 导入 | `scripts/cli.ts` | 文件解析后同步到后端、批量导入 |
 | Firestore 保存 | `src/App.tsx` | 会话、笔记、闪卡写入 |
@@ -306,8 +307,10 @@ For commercial multi-tenant use, API keys are now stored per-user instead of glo
 - `gemini-2.5-flash-lite`
 
 **OpenAI:**
-- `gpt-5.2`
-- `gpt-5.2-pro`
+- `gpt-5.4` (最新通用模型)
+- `gpt-5.3` / `gpt-5.3-codex`
+- `gpt-5.2` / `gpt-5.2-codex` / `gpt-5.2-pro`
+- `gpt-5.1` / `gpt-5.1-codex` / `gpt-5.1-codex-max` / `gpt-5.1-codex-mini`
 - `gpt-5-mini`
 
 **MiniMax:**
@@ -508,3 +511,6 @@ npx tsx cli.ts ./path/to/file.txt
 - Firestore 安全规则在 `config/firestore.rules`
 - 多提供商认证在 `src/api/auth.ts`（WeChat/QQ OAuth）
 - 用户级 API Key 在 `src/services/userApiKeyService.ts`
+- 知识提炼模型配置在 `SettingsView`，用户可独立选择结构化输出模型（对话模型 vs 知识提炼模型）
+- GPT-5.4 / GPT-5.3 系列模型已添加，支持通用版和 Codex 代码版
+- 流式聊天体验已完成，支持 SSE 实时显示和停止/重新生成

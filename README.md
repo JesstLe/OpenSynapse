@@ -552,9 +552,13 @@ OPENSYNAPSE_CLI_MODEL=gemini-2.5-pro npx tsx scripts/cli.ts ./file.txt
 - [x] 用户级 API Key 管理
 - [x] 商业级数据隔离
 
+### Phase 3 ✅ 已完成
+- [x] 流式聊天体验（SSE + 思考过程展示）
+- [x] 知识提炼模型可配置（支持自定义结构化输出模型）
+- [x] GPT-5.4 / GPT-5.3 模型支持
+
 ### Phase 3 🔄 进行中
-- [ ] 流式聊天体验
-- [ ] 智能 RAG 优化
+- [ ] 智能 RAG 优化（基础功能可用，需工具调用改造）
 - [ ] 多语言支持
 
 ### Phase 3 📋 计划中

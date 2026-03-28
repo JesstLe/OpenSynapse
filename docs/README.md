@@ -43,6 +43,7 @@
 | [ai-tutor-system-design.md](./features/ai-tutor-system-design.md) | AI 智能导师系统设计 | 规划教学策略、导师状态与人格联动 |
 | [knowledge-recommendation-engine-design.md](./features/knowledge-recommendation-engine-design.md) | 知识推荐引擎设计 | 规划知识点推荐、排序与图谱联动 |
 | [learning-path-planning-design.md](./features/learning-path-planning-design.md) | 学习路径规划设计 | 规划路径节点、前置依赖与动态推进 |
+| [dissipative-structure-valve-slash-command-design.md](./features/dissipative-structure-valve-slash-command-design.md) | 耗散结构安全阀斜杠命令设计 | 为 opencode / Claude Code 设计长链防漂移命令 |
 
 ### 📋 项目规划
 
@@ -83,7 +84,8 @@ OpenSynapse/
 │       ├── language-memory-engine-implementation-plan.md
 │       ├── ai-tutor-system-design.md
 │       ├── knowledge-recommendation-engine-design.md
-│       └── learning-path-planning-design.md
+│       ├── learning-path-planning-design.md
+│       └── dissipative-structure-valve-slash-command-design.md
 │
 ├── scripts/                 # 🛠️ 工具脚本
 │   ├── cli.ts               # CLI 主程序
