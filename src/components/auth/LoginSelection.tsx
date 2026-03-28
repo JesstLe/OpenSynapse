@@ -56,28 +56,6 @@ export default function LoginSelection({ onGoogleLogin, onAuthError }: LoginSele
       shadowColor: 'shadow-gray-500/20',
       description: '使用 Google 账号登录',
     },
-    {
-      id: 'wechat',
-      name: '微信',
-      icon: <MessageCircle className="w-5 h-5" />,
-      brandIcon: <MessageCircle className="w-6 h-6" />,
-      color: '#07C160',
-      bgColor: 'bg-[#07C160]',
-      hoverColor: 'hover:bg-[#06ad56]',
-      shadowColor: 'shadow-green-500/30',
-      description: '使用微信扫码登录',
-    },
-    {
-      id: 'qq',
-      name: 'QQ',
-      icon: <MessageSquare className="w-5 h-5" />,
-      brandIcon: <MessageSquare className="w-6 h-6" />,
-      color: '#12B7F5',
-      bgColor: 'bg-[#12B7F5]',
-      hoverColor: 'hover:bg-[#0fa8e0]',
-      shadowColor: 'shadow-sky-500/30',
-      description: '使用 QQ 账号登录',
-    },
   ];
 
   const handleGoogleLogin = async () => {
