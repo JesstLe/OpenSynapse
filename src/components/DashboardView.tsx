@@ -22,6 +22,7 @@ export default function DashboardView({ notes, flashcards, chatSessions, onStart
   const [isExporting, setIsExporting] = React.useState(false);
   const [analyzingTag, setAnalyzingTag] = React.useState<string | null>(null);
   const [hoveredDay, setHoveredDay] = React.useState<{ date: Date, count: number, dateStr: string, x: number, y: number } | null>(null);
+  const activityCardRef = React.useRef<HTMLDivElement | null>(null);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -416,7 +417,7 @@ ${flashcards
         </div>
 
         {/* Learning Activity (GitHub Style) */}
-        <div className="bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-6 md:p-8 shadow-sm relative activity-chart-container">
+        <div ref={activityCardRef} className="bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-6 md:p-8 shadow-sm relative activity-chart-container overflow-hidden">
           <div className="flex items-center justify-between mb-8">
             <h3 className="font-bold text-base md:text-lg flex items-center gap-2 text-text-main">
               <Calendar size={18} className="text-green-500" />
@@ -471,11 +472,17 @@ ${flashcards
                         key={day.dateStr} 
                         onMouseEnter={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect();
-                          const containerRect = e.currentTarget.closest('.activity-chart-container')?.getBoundingClientRect();
+                          const containerRect = activityCardRef.current?.getBoundingClientRect();
                           if (containerRect) {
+                            const rawX = rect.left - containerRect.left + rect.width / 2;
+                            const tooltipHalfWidth = window.innerWidth < 768 ? 76 : 120;
+                            const clampedX = Math.min(
+                              Math.max(rawX, tooltipHalfWidth),
+                              containerRect.width - tooltipHalfWidth
+                            );
                             setHoveredDay({
                               ...day,
-                              x: rect.left - containerRect.left + rect.width / 2,
+                              x: clampedX,
                               y: rect.top - containerRect.top
                             });
                           }
@@ -502,7 +509,7 @@ ${flashcards
                 initial={{ opacity: 0, y: 5, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 5, scale: 0.95 }}
-                className="absolute z-50 px-3 py-2 bg-text-main text-bg-card text-[10px] rounded-lg shadow-xl pointer-events-none whitespace-nowrap"
+                className="absolute z-50 max-w-[152px] md:max-w-[240px] px-3 py-2 bg-text-main text-bg-card text-[10px] rounded-lg shadow-xl pointer-events-none text-center"
                 style={{ 
                   left: hoveredDay.x, 
                   top: hoveredDay.y - 12 - (window.innerWidth < 768 ? 40 : 50),
