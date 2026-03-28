@@ -35,6 +35,15 @@ export const accounts = pgTable('account', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+export const verification = pgTable('verification', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull(),
+  value: text('value').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const notes = pgTable('notes', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id),

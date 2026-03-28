@@ -1,11 +1,16 @@
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins";
 import { db } from "../db";
+import * as schema from "../db/schema";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
+    schema: { ...schema },
   }),
 
   plugins: [bearer()],

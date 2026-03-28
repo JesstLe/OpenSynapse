@@ -1,8 +1,10 @@
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs/promises";
-import dotenv from "dotenv";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./src/auth/server";
 import aiRouter from './src/api/ai';
