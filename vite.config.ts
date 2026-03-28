@@ -25,5 +25,32 @@ export default defineConfig(({mode}) => {
         },
       },
     },
+    build: {
+      commonjsOptions: {
+        transformMixedEsModules: true,
+      },
+      rollupOptions: {
+        external: [
+          'firebase-admin',
+          'google-auth-library',
+          'node-fetch',
+          'express',
+          'fs',
+          'path',
+          'os',
+          'crypto',
+          'http',
+          'https',
+        ],
+      },
+    },
+    optimizeDeps: {
+      exclude: [
+        'firebase-admin',
+        'google-auth-library',
+        'node-fetch',
+        'express',
+      ],
+    },
   };
 });
