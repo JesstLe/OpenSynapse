@@ -16,7 +16,8 @@ import {
   loadCredentials,
   resolveOAuthClientConfig,
 } from '../lib/oauth.js';
-import { getApiKeyConfigForServer } from '../services/userApiKeyService.js';
+import { getApiKeyConfigForServer } from '../services/userApiKeyService.server.js';
+import { auth } from '../auth/server.js';
 
 dotenv.config({ path: '.env.local' });
 
@@ -73,10 +74,14 @@ function withApiModelId(params: any) {
   };
 }
 
-async function getUidFromToken(authHeader: string): Promise<string | null> {
-  // With better-auth, session is handled via cookies
-  // This function is kept for compatibility but auth is handled by the session middleware
-  return null;
+async function getUidFromToken(req: express.Request): Promise<string | null> {
+  try {
+    const headers = new Headers(Object.entries(req.headers).map(([k, v]) => [k, String(v)]));
+    const session = await auth.api.getSession({ headers });
+    return session?.user?.id || null;
+  } catch {
+    return null;
+  }
 }
 
 type ResolvedProviderCredentials = {
@@ -140,7 +145,7 @@ async function resolveProviderCredentialsFromRequest(
   authHeader: string | undefined,
   provider: SupportedProvider
 ): Promise<ResolvedProviderCredentials> {
-  const uid = authHeader ? await getUidFromToken(authHeader) : null;
+  const uid = await getUidFromToken(req);
   const userCredentials = uid ? await getUserProviderCredentials(uid, provider) : null;
   const requestCredentials = getRequestSuppliedCredentials(req, provider);
 

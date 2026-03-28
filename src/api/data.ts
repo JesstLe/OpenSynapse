@@ -184,7 +184,21 @@ router.post("/flashcards/:id/review", requireAuth(async (req, res, userId) => {
 router.get("/chat-sessions", requireAuth(async (req, res, userId) => {
   try {
     const sessions = await chatRepo.session.findByUser(userId);
-    res.json(sessions);
+    const sessionsWithMessages = await Promise.all(
+      sessions.map(async (session) => {
+        const messages = await chatRepo.message.findBySession(session.id);
+        return {
+          ...session,
+          messages: messages.map(m => ({
+            role: m.role,
+            text: m.content,
+            thought: m.thinking,
+            image: m.image,
+          })),
+        };
+      })
+    );
+    res.json(sessionsWithMessages);
   } catch (error) {
     console.error("Failed to list chat sessions:", error);
     res.status(500).json({ error: "Failed to list chat sessions" });
@@ -214,8 +228,22 @@ router.put("/chat-sessions/:id", requireAuth(async (req, res, userId) => {
     if (existing.userId !== userId) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const session = await chatRepo.session.update(req.params.id, req.body);
-    res.json(session);
+    const { messages, ...sessionData } = req.body;
+    const session = await chatRepo.session.update(req.params.id, sessionData);
+    if (messages && Array.isArray(messages)) {
+      await chatRepo.message.deleteBySession(req.params.id);
+      for (const msg of messages) {
+        await chatRepo.message.create({
+          id: crypto.randomUUID(),
+          sessionId: req.params.id,
+          role: msg.role,
+          content: msg.text || msg.content || '',
+          thinking: msg.thought || msg.thinking,
+          image: msg.image,
+        });
+      }
+    }
+    res.json({ ...session, messages: messages || [] });
   } catch (error) {
     console.error("Failed to update chat session:", error);
     res.status(500).json({ error: "Failed to update chat session" });
