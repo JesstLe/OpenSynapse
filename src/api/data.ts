@@ -91,7 +91,9 @@ router.put("/notes/:id", requireAuth(async (req, res, userId) => {
     if (existing.userId !== userId) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const note = await noteRepo.update(req.params.id, req.body);
+    const { title, content, summary, tags, relatedIds, codeSnippet, source } = req.body;
+    const updateData = { title, content, summary, tags, relatedIds, codeSnippet, source };
+    const note = await noteRepo.update(req.params.id, updateData);
     res.json(mapNoteToFrontend(note));
   } catch (error) {
     console.error("Failed to update note:", error);
@@ -176,8 +178,8 @@ router.put("/flashcards/:id", requireAuth(async (req, res, userId) => {
     if (existing.userId !== userId) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const { nextReview, repetitions, ...updateData } = req.body;
-    const updatePayload: any = { ...updateData };
+    const { question, answer, stability, difficulty, elapsedDays, scheduledDays, state, nextReview, repetitions } = req.body;
+    const updatePayload: any = { question, answer, stability, difficulty, elapsedDays, scheduledDays, state };
     if (nextReview !== undefined) updatePayload.due = toDbDate(nextReview);
     if (repetitions !== undefined) updatePayload.reps = repetitions;
     const card = await flashcardRepo.update(req.params.id, updatePayload);
@@ -192,7 +194,9 @@ router.delete("/flashcards/note/:noteId", requireAuth(async (req, res, userId) =
   try {
     const cards = await flashcardRepo.findByNote(req.params.noteId);
     for (const card of cards) {
-      await flashcardRepo.delete(card.id);
+      if (card.userId === userId) {
+        await flashcardRepo.delete(card.id);
+      }
     }
     res.json({ success: true });
   } catch (error) {
@@ -405,7 +409,9 @@ router.put("/personas/:id", requireAuth(async (req, res, userId) => {
     if (existing.userId !== userId) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const persona = await personaRepo.update(req.params.id, req.body);
+    const { name, description, systemPrompt, icon, isHidden } = req.body;
+    const updateData = { name, description, systemPrompt, icon, isHidden };
+    const persona = await personaRepo.update(req.params.id, updateData);
     res.json(persona);
   } catch (error) {
     console.error("Failed to update persona:", error);

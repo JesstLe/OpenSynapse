@@ -614,7 +614,6 @@ export default function SettingsView({
   };
 
   const isProviderConnected = (provider: string) => {
-    if (provider === 'google') return !!user;
     return connectedProviders.includes(provider);
   };
 
