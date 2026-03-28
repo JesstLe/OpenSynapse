@@ -4,7 +4,7 @@ import { Chrome, Loader2, Sparkles, Lock, ArrowRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface LoginSelectionProps {
-  onGoogleLogin?: () => Promise<void>;
+  onSocialLogin?: (provider: LoginProvider) => Promise<void>;
   onAuthError?: (error: string) => void;
 }
 
@@ -22,7 +22,7 @@ interface ProviderConfig {
   description: string;
 }
 
-export default function LoginSelection({ onGoogleLogin, onAuthError }: LoginSelectionProps) {
+export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSelectionProps) {
   const [loadingProvider, setLoadingProvider] = useState<LoginProvider | null>(null);
 
   const providers: ProviderConfig[] = [
@@ -80,28 +80,16 @@ export default function LoginSelection({ onGoogleLogin, onAuthError }: LoginSele
     },
   ];
 
-  const handleGoogleLogin = async () => {
-    if (!onGoogleLogin) return;
-    setLoadingProvider('google');
+  const handleProviderClick = async (provider: ProviderConfig) => {
+    if (loadingProvider || !onSocialLogin) return;
+    setLoadingProvider(provider.id);
     try {
-      await onGoogleLogin();
+      await onSocialLogin(provider.id);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Google 登录失败';
+      const errorMessage = error instanceof Error ? error.message : `${provider.name} 登录失败`;
       onAuthError?.(errorMessage);
     } finally {
       setLoadingProvider(null);
-    }
-  };
-
-  const handleProviderClick = (provider: ProviderConfig) => {
-    if (loadingProvider) return;
-
-    switch (provider.id) {
-      case 'google':
-      case 'github':
-      case 'discord':
-        void handleGoogleLogin();
-        break;
     }
   };
 

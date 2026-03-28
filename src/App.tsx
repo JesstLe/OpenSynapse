@@ -190,10 +190,10 @@ export default function App() {
     loadData();
   }, [isAuthReady, user, isUsingDevAuthBypass]);
 
-  const handleLogin = async () => {
+  const handleLogin = async (provider: 'google' | 'github' | 'discord') => {
     try {
       await authClient.signIn.social({
-        provider: 'google',
+        provider,
         callbackURL: window.location.origin,
       });
     } catch (error) {
@@ -360,7 +360,7 @@ export default function App() {
   if (!user && !isUsingDevAuthBypass) {
     return (
       <LoginSelection
-        onGoogleLogin={handleLogin}
+        onSocialLogin={handleLogin}
         onAuthError={(error) => console.error('Login error:', error)}
       />
     );
