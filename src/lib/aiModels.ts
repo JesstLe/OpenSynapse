@@ -65,13 +65,13 @@ export const AI_PROVIDERS: Record<AIProviderId, AIProviderDefinition> = {
   },
   moonshot: {
     id: 'moonshot',
-    label: 'Moonshot Kimi',
+    label: 'Kimi Code',
     authMode: 'api_key',
     protocol: 'openai_compat',
     apiKeyEnvVar: 'MOONSHOT_API_KEY',
-    baseUrl: 'https://api.kimi.com/coding/',
+    baseUrl: 'https://api.kimi.com/coding/v1',
     baseUrlEnvVar: 'MOONSHOT_BASE_URL',
-    docsUrl: 'https://platform.moonshot.ai/docs',
+    docsUrl: 'https://www.kimi.com/code/docs/',
   },
 };
 
@@ -264,40 +264,13 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     docsUrl: 'https://open.bigmodel.cn/dev/api',
   },
   {
-    id: 'moonshot/kimi-k2-thinking',
+    id: 'moonshot/kimi-for-coding',
     provider: 'moonshot',
-    model: 'kimi-k2-thinking',
-    label: 'Kimi K2 Thinking',
-    description: 'Moonshot 当前官方推理模型。',
+    model: 'kimi-for-coding',
+    label: 'Kimi for Coding',
+    description: 'Kimi Code 编程专用模型，最高 100 Tokens/s，支持推理。',
     lifecycle: 'stable',
-    docsUrl: 'https://platform.moonshot.ai/docs',
-  },
-  {
-    id: 'moonshot/kimi-k2-thinking-turbo',
-    provider: 'moonshot',
-    model: 'kimi-k2-thinking-turbo',
-    label: 'Kimi K2 Thinking Turbo',
-    description: 'Moonshot 低延迟推理模型。',
-    lifecycle: 'stable',
-    docsUrl: 'https://platform.moonshot.ai/docs',
-  },
-  {
-    id: 'moonshot/kimi-k2-0905-preview',
-    provider: 'moonshot',
-    model: 'kimi-k2-0905-preview',
-    label: 'Kimi K2 0905 Preview',
-    description: 'Moonshot 官方 K2 预览版，适合尝鲜新能力。',
-    lifecycle: 'preview',
-    docsUrl: 'https://platform.moonshot.ai/docs',
-  },
-  {
-    id: 'moonshot/kimi-k2-turbo-preview',
-    provider: 'moonshot',
-    model: 'kimi-k2-turbo-preview',
-    label: 'Kimi K2 Turbo Preview',
-    description: 'Moonshot 预览低延迟模型。',
-    lifecycle: 'preview',
-    docsUrl: 'https://platform.moonshot.ai/docs',
+    docsUrl: 'https://www.kimi.com/code/docs/',
   },
 ];
 
@@ -357,8 +330,6 @@ export const MODEL_FALLBACKS: Record<string, string[]> = {
   'openai/gpt-5.2-pro': ['openai/gpt-5.2', 'openai/gpt-5-mini'],
   'minimax/MiniMax-M2.5': ['minimax/MiniMax-M2.5-highspeed'],
   'zhipu/glm-5': ['zhipu/glm-4.7'],
-  'moonshot/kimi-k2-thinking': ['moonshot/kimi-k2-thinking-turbo', 'moonshot/kimi-k2-0905-preview'],
-  'moonshot/kimi-k2-0905-preview': ['moonshot/kimi-k2-turbo-preview'],
 };
 
 const LEGACY_MODEL_ALIASES: Record<string, string> = Object.fromEntries(
