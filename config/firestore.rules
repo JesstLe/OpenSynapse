@@ -2,47 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: notes
-    // Document ID: {noteId}
-    // Fields:
-    //   - id: string (required)
-    //   - title: string (required, max 200)
-    //   - content: string (required, max 50000)
-    //   - summary: string (optional, max 1000)
-    //   - tags: list (optional, max 50 items)
-    //   - relatedIds: list (optional, max 50 items)
-    //   - createdAt: string (required, ISO 8601)
-    //   - userId: string (required, matches auth.uid)
-    //
-    // Collection: flashcards
-    // Document ID: {cardId}
-    // Fields:
-    //   - id: string (required)
-    //   - noteId: string (required)
-    //   - front: string (required, max 2000)
-    //   - back: string (required, max 5000)
-    //   - difficulty: number (required)
-    //   - stability: number (required)
-    //   - retrievability: number (required)
-    //   - lastReview: string (optional, ISO 8601)
-    //   - nextReview: string (required, ISO 8601)
-    //   - userId: string (required, matches auth.uid)
-    //
-    // Collection: chat_sessions
-    // Document ID: {sessionId}
-    // Fields:
-    //   - id: string (required)
-    //   - title: string (optional, max 100)
-    //   - messages: list (required, max 100 items)
-    //   - updatedAt: number (required)
-    //   - userId: string (required, matches auth.uid)
-    //
-    // ===============================================================
-
-    // ===============================================================
     // Helper Functions
     // ===============================================================
     function isAuthenticated() {
@@ -53,77 +12,94 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-    function isValidDateString(dateStr) {
-      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
-    }
-
     // ===============================================================
-    // Domain Validators
+    // Existing Collections: notes, flashcards, chat_sessions
     // ===============================================================
-
-    function isValidNote(data) {
-      return data.id is string &&
-             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
-             data.content is string && data.content.size() <= 50000 &&
-             (!('summary' in data) || (data.summary is string && data.summary.size() <= 1000)) &&
-             (!('tags' in data) || (data.tags is list && data.tags.size() <= 50)) &&
-             (!('relatedIds' in data) || (data.relatedIds is list && data.relatedIds.size() <= 50)) &&
-             isValidDateString(data.createdAt) &&
-             data.userId == request.auth.uid;
-    }
-
-    function isValidFlashcard(data) {
-      return data.id is string &&
-             data.noteId is string &&
-             data.front is string && data.front.size() > 0 && data.front.size() <= 2000 &&
-             data.back is string && data.back.size() > 0 && data.back.size() <= 5000 &&
-             data.difficulty is number &&
-             data.stability is number &&
-             data.retrievability is number &&
-             (!('lastReview' in data) || isValidDateString(data.lastReview)) &&
-             isValidDateString(data.nextReview) &&
-             data.userId == request.auth.uid;
-    }
-
-    function isValidChatSession(data) {
-      return data.id is string &&
-             (!('title' in data) || (data.title is string && data.title.size() <= 100)) &&
-             data.messages is list && data.messages.size() <= 100 &&
-             data.updatedAt is number &&
-             data.userId == request.auth.uid;
-    }
-
-    // ===============================================================
-    // Rules
-    // ===============================================================
-
+    
     match /notes/{noteId} {
       allow read: if isOwner(resource.data.userId);
-      allow create: if isAuthenticated() && isValidNote(request.resource.data);
-      allow update: if isOwner(resource.data.userId) && isValidNote(request.resource.data);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isOwner(resource.data.userId) && request.resource.data.userId == request.auth.uid;
       allow delete: if isOwner(resource.data.userId);
     }
 
     match /flashcards/{cardId} {
       allow read: if isOwner(resource.data.userId);
-      allow create: if isAuthenticated() && isValidFlashcard(request.resource.data);
-      allow update: if isOwner(resource.data.userId) && isValidFlashcard(request.resource.data);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isOwner(resource.data.userId) && request.resource.data.userId == request.auth.uid;
       allow delete: if isOwner(resource.data.userId);
     }
 
     match /chat_sessions/{sessionId} {
       allow read: if isOwner(resource.data.userId);
-      allow create: if isAuthenticated() && isValidChatSession(request.resource.data);
-      allow update: if isOwner(resource.data.userId) && isValidChatSession(request.resource.data);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isOwner(resource.data.userId) && request.resource.data.userId == request.auth.uid;
       allow delete: if isOwner(resource.data.userId);
+    }
+
+    // ===============================================================
+    // NEW: User Profile
+    // Collection: users/{firebaseUid}
+    // 用户可以读写自己的档案
+    // ===============================================================
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isAuthenticated() && request.auth.uid == uid;
+      allow update: if isOwner(uid);
+      allow delete: if isOwner(uid);
+    }
+
+    // ===============================================================
+    // NEW: Custom Personas
+    // Collection: custom_personas/{personaId}
+    // 用户可以读写自己创建的人格
+    // ===============================================================
+    match /custom_personas/{personaId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // ===============================================================
+    // NEW: Connected Accounts (Third-party login mapping)
+    // Collection: connected_accounts/{provider}_{providerUserId}
+    // 用户只读自己的账号映射，创建/更新/删除由服务端控制
+    // ===============================================================
+    match /connected_accounts/{accountId} {
+      // 用户只能读取关联到自己 firebaseUid 的记录
+      allow read: if isAuthenticated() && resource.data.firebaseUid == request.auth.uid;
+      // 创建、更新、删除仅允许服务端（通过 Admin SDK 或特定服务账号）
+      // 前端不应直接写入此集合
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ===============================================================
+    // NEW: Account Secrets (User-level API Keys)
+    // Collection: account_secrets/{firebaseUid}
+    // ⚠️ 严格限制：仅允许用户自己访问自己的 API Key
+    // 服务端通过 Admin SDK 读取，前端只能读写自己的
+    // ===============================================================
+    match /account_secrets/{uid} {
+      // 严格限制：只能访问自己的 API Key
+      allow read: if isOwner(uid);
+      allow create: if isAuthenticated() && request.auth.uid == uid;
+      allow update: if isOwner(uid);
+      allow delete: if isOwner(uid);
+    }
+
+    // ===============================================================
+    // NEW: Auth Sessions (Short-term OAuth state)
+    // Collection: auth_sessions/{sessionId}
+    // 仅服务端读写
+    // ===============================================================
+    match /auth_sessions/{sessionId} {
+      allow read: if false;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }
