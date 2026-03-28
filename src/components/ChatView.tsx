@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { Send, Sparkles, Loader2, BrainCircuit, Image as ImageIcon, X, LayoutDashboard, History, Plus, Trash2, MessageSquare, FileText, FileUp, Link as LinkIcon, ChevronRight, BookOpen, Square, RefreshCw, Pencil, Copy, Check, Edit3, Download, Search, Filter, Gavel, TrendingUp, Sigma, ShieldAlert } from 'lucide-react';
 import { ChatMessage, Note, Flashcard, ChatSession, Persona } from '../types';
 import { PRESET_PERSONAS, DEFAULT_PERSONA_ID, getCSTutorPersona } from '../lib/personas';
@@ -941,7 +944,10 @@ export default function ChatView({
                 </div>
               ) : (
                 <div className="markdown-body">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm, remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
+                  >
                     {msg.text || (isLoading && i === messages.length - 1 ? '' : '')}
                   </ReactMarkdown>
                 </div>
