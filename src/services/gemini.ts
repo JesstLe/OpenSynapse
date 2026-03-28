@@ -238,62 +238,82 @@ export async function findRelevantNotes(query: string, notes: Note[], limit: num
   }
 }
 
+// ─── JSON 安全解析辅助函数 ───
+
+function safeJsonParse(text: string): any {
+  try {
+    return JSON.parse(text);
+  } catch {
+    // 尝试从文本中提取 JSON 块（被 ```json 和 ``` 包围的内容）
+    const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonBlockMatch) {
+      try {
+        return JSON.parse(jsonBlockMatch[1].trim());
+      } catch {}
+    }
+
+    // 尝试从文本中提取第一个看起来像 JSON 对象的内容
+    const jsonObjectMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonObjectMatch) {
+      try {
+        return JSON.parse(jsonObjectMatch[0]);
+      } catch {}
+    }
+
+    // 尝试从文本中提取第一个看起来像 JSON 数组的内容
+    const jsonArrayMatch = text.match(/\[[\s\S]*\]/);
+    if (jsonArrayMatch) {
+      try {
+        return JSON.parse(jsonArrayMatch[0]);
+      } catch {}
+    }
+
+    throw new Error(`无法解析 JSON，返回内容：${text.substring(0, 200)}...`);
+  }
+}
+
 // ─── 知识提炼 ───
 
 export async function processConversation(chatHistory: string[]): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
   const modelId = getPreferredStructuredModel();
   const prompt = `你是一位严谨的计算机科学导师。请分析以下对话，提取出核心知识点。
-  
-  对于每一个知识点，请生成：
-  1. 一篇结构化的笔记 (Note)：
-     - 标题要专业且具象。
-     - 内容必须包含：【史前时代】（没有该技术时的灾难）、【解决方案】（该技术如何优雅地解决问题）、【权衡】（引入该技术带来的新问题或成本）。
-  2. 3-5 个用于主动召回的高质量闪卡 (Flashcards)：
-     - **严禁**简单的名词解释。
-     - 问题必须是"场景化"或"原理化"的。
-     - 答案必须包含底层逻辑。
 
-  对话内容：
-  ${chatHistory.join("\n")}
-  `;
+对于每一个知识点，请生成：
+1. 一篇结构化的笔记 (Note)：
+   - 标题要专业且具象。
+   - 内容必须包含：【史前时代】（没有该技术时的灾难）、【解决方案】（该技术如何优雅地解决问题）、【权衡】（引入该技术带来的新问题或成本）。
+2. 3-5 个用于主动召回的高质量闪卡 (Flashcards)：
+   - **严禁**简单的名词解释。
+   - 问题必须是"场景化"或"原理化"的。
+   - 答案必须包含底层逻辑。
+
+请严格按以下 JSON 格式输出，不要添加任何其他解释文字：
+{
+  "note": {
+    "title": "笔记标题",
+    "summary": "简短摘要",
+    "content": "详细内容",
+    "tags": ["标签1", "标签2"]
+  },
+  "flashcards": [
+    {"question": "问题1", "answer": "答案1"},
+    {"question": "问题2", "answer": "答案2"}
+  ]
+}
+
+对话内容：
+${chatHistory.join("\n")}
+`;
 
   const response = await ai.models.generateContent({
     model: modelId,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          note: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              summary: { type: Type.STRING },
-              content: { type: Type.STRING },
-              codeSnippet: { type: Type.STRING },
-              tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            },
-            required: ["title", "summary", "content", "tags"],
-          },
-          flashcards: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                question: { type: Type.STRING },
-                answer: { type: Type.STRING },
-              },
-              required: ["question", "answer"],
-            },
-          },
-        },
-        required: ["note", "flashcards"],
-      },
     },
   });
 
-  return JSON.parse(response.text);
+  return safeJsonParse(response.text);
 }
 
 export async function findSemanticLinks(newNote: Note, existingNotes: Note[]): Promise<string[]> {
@@ -314,33 +334,47 @@ export async function findSemanticLinks(newNote: Note, existingNotes: Note[]): P
   }
 
   const prompt = `给定一条新笔记： "${newNote.title}: ${newNote.summary}"
-  以及现有笔记： ${existingNotes.map(n => `ID: ${n.id}, 标题: ${n.title}`).join("; ")}
-  识别哪些现有笔记与新笔记在语义上相关。
-  仅返回相关笔记的 ID 数组。`;
+以及现有笔记： ${existingNotes.map(n => `ID: ${n.id}, 标题: ${n.title}`).join("; ")}
+识别哪些现有笔记与新笔记在语义上相关。
+
+请严格按以下 JSON 数组格式输出相关笔记的 ID，不要添加任何其他解释文字：
+["note-id-1", "note-id-2"]`;
 
   const response = await ai.models.generateContent({
     model: modelId,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: { type: Type.STRING },
-      },
     },
   });
 
-  return JSON.parse(response.text);
+  return safeJsonParse(response.text);
 }
 
 export async function deconstructScannedDocument(base64Image: string): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
   const modelId = getPreferredStructuredModel();
   const prompt = `你是一位顶尖的知识架构师。请分析这张扫描文档或图片的页面内容，并将其"解构"为结构化的知识资产。
-  
-  请提取出最核心的一个知识点，并生成：
-  1. 一篇结构化的笔记 (Note)。
-  2. 3-5 个用于主动召回的高质量闪卡 (Flashcards)。
-  `;
+
+请提取出最核心的一个知识点，并生成：
+1. 一篇结构化的笔记 (Note)：
+   - 标题要专业且具象
+   - 内容包含详细解释
+   - 添加相关标签
+2. 3-5 个用于主动召回的高质量闪卡 (Flashcards)
+
+请严格按以下 JSON 格式输出，不要添加任何其他解释文字：
+{
+  "note": {
+    "title": "笔记标题",
+    "summary": "简短摘要",
+    "content": "详细内容",
+    "tags": ["标签1", "标签2"]
+  },
+  "flashcards": [
+    {"question": "问题1", "answer": "答案1"},
+    {"question": "问题2", "answer": "答案2"}
+  ]
+}`;
 
   const response = await ai.models.generateContent({
     model: modelId,
@@ -357,88 +391,64 @@ export async function deconstructScannedDocument(base64Image: string): Promise<{
     },
     config: {
       responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          note: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              summary: { type: Type.STRING },
-              content: { type: Type.STRING },
-              codeSnippet: { type: Type.STRING },
-              tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            },
-            required: ["title", "summary", "content", "tags"],
-          },
-          flashcards: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                question: { type: Type.STRING },
-                answer: { type: Type.STRING },
-              },
-              required: ["question", "answer"],
-            },
-          },
-        },
-        required: ["note", "flashcards"],
-      },
     },
   });
 
-  return JSON.parse(response.text);
+  return safeJsonParse(response.text);
 }
 
 export async function deconstructTOC(text: string): Promise<{ chapters: { title: string, startPage: number, endPage: number, summary: string }[] }> {
   const modelId = getPreferredStructuredModel();
   const prompt = `你是一位顶尖的知识架构师。请分析以下教材或文档的前几页内容，提取出其目录结构。
-  
-  请识别出最核心的 5-8 个章节，并为每个章节提供标题、起始/结束页码、核心知识点简述。
 
-  文档内容：
-  ${text.slice(0, 20000)}
-  `;
+请识别出最核心的 5-8 个章节，并为每个章节提供标题、起始/结束页码、核心知识点简述。
+
+请严格按以下 JSON 格式输出，不要添加任何其他解释文字：
+{
+  "chapters": [
+    {"title": "章节1", "startPage": 1, "endPage": 10, "summary": "简述1"},
+    {"title": "章节2", "startPage": 11, "endPage": 20, "summary": "简述2"}
+  ]
+}
+
+文档内容：
+${text.slice(0, 20000)}`;
 
   const response = await ai.models.generateContent({
     model: modelId,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          chapters: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                startPage: { type: Type.NUMBER },
-                endPage: { type: Type.NUMBER },
-                summary: { type: Type.STRING },
-              },
-              required: ["title", "startPage", "endPage", "summary"],
-            },
-          },
-        },
-        required: ["chapters"],
-      },
     },
   });
 
-  return JSON.parse(response.text);
+  return safeJsonParse(response.text);
 }
 
 export async function deconstructUrl(url: string): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
   const modelId = getPreferredStructuredModel();
   const prompt = `你是一位顶尖的知识架构师。请访问并深度解构以下 URL 的内容：${url}。
-  
-  请提取出最核心的一个知识点，并生成：
-  1. 一篇结构化的笔记 (Note)。
-  2. 3-5 个用于主动召回的高质量闪卡 (Flashcards)。
-  `;
+
+请提取出最核心的一个知识点，并生成：
+1. 一篇结构化的笔记 (Note)：
+   - 标题要专业且具象
+   - 内容包含详细解释
+   - 添加相关标签
+2. 3-5 个用于主动召回的高质量闪卡 (Flashcards)
+
+请严格按以下 JSON 格式输出，不要添加任何其他解释文字：
+{
+  "note": {
+    "title": "笔记标题",
+    "summary": "简短摘要",
+    "content": "详细内容",
+    "tags": ["标签1", "标签2"]
+  },
+  "flashcards": [
+    {"question": "问题1", "answer": "答案1"},
+    {"question": "问题2", "answer": "答案2"}
+  ]
+}`;
 
   const response = await ai.models.generateContent({
     model: modelId,
@@ -446,38 +456,10 @@ export async function deconstructUrl(url: string): Promise<{ note: Partial<Note>
     config: {
       tools: [{ urlContext: {} }],
       responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          note: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              summary: { type: Type.STRING },
-              content: { type: Type.STRING },
-              codeSnippet: { type: Type.STRING },
-              tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            },
-            required: ["title", "summary", "content", "tags"],
-          },
-          flashcards: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                question: { type: Type.STRING },
-                answer: { type: Type.STRING },
-              },
-              required: ["question", "answer"],
-            },
-          },
-        },
-        required: ["note", "flashcards"],
-      },
     },
   });
 
-  return JSON.parse(response.text);
+  return safeJsonParse(response.text);
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
@@ -500,21 +482,18 @@ export async function analyzeKnowledgeGaps(tag: string, cards: Flashcard[]): Pro
   ${cards.map(c => `- Q: ${c.question}\n  A: ${c.answer}`).join('\n')}
   
   请分析这些错误背后的"认知断层"。
-  返回一个包含 2-3 个具体薄弱点的字符串数组。`;
+  请严格按以下 JSON 数组格式输出 2-3 个具体薄弱点，不要添加任何其他解释文字：
+  ["薄弱点1", "薄弱点2", "薄弱点3"]`;
 
   const response = await ai.models.generateContent({
     model: modelId,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: { type: Type.STRING },
-      },
     },
   });
 
-  return JSON.parse(response.text);
+  return safeJsonParse(response.text);
 }
 
 export async function startBreakthroughChat(config: BreakthroughConfig, allNotes: Note[]) {
@@ -588,52 +567,40 @@ ${contextText}
 export async function deconstructDocument(text: string): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
   const modelId = getPreferredStructuredModel();
   const prompt = `你是一位顶尖的知识架构师。请将以下长文档"解构"为结构化的知识资产。
-  
-  请提取出最核心的一个知识点，并生成：
-  1. 一篇结构化的笔记 (Note)。
-  2. 3-5 个用于主动召回的高质量闪卡 (Flashcards)。
 
-  文档内容：
-  ${text.slice(0, 20000)}
-  `;
+请提取出最核心的一个知识点，并生成：
+1. 一篇结构化的笔记 (Note)：
+   - 标题要专业且具象
+   - 内容包含详细解释
+   - 添加相关标签
+2. 3-5 个用于主动召回的高质量闪卡 (Flashcards)
+
+请严格按以下 JSON 格式输出，不要添加任何其他解释文字：
+{
+  "note": {
+    "title": "笔记标题",
+    "summary": "简短摘要",
+    "content": "详细内容",
+    "tags": ["标签1", "标签2"]
+  },
+  "flashcards": [
+    {"question": "问题1", "answer": "答案1"},
+    {"question": "问题2", "answer": "答案2"}
+  ]
+}
+
+文档内容：
+${text.slice(0, 20000)}`;
 
   const response = await ai.models.generateContent({
     model: modelId,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          note: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              summary: { type: Type.STRING },
-              content: { type: Type.STRING },
-              codeSnippet: { type: Type.STRING },
-              tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            },
-            required: ["title", "summary", "content", "tags"],
-          },
-          flashcards: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                question: { type: Type.STRING },
-                answer: { type: Type.STRING },
-              },
-              required: ["question", "answer"],
-            },
-          },
-        },
-        required: ["note", "flashcards"],
-      },
     },
   });
 
-  return JSON.parse(response.text);
+  return safeJsonParse(response.text);
 }
 
 export async function semanticSearch(query: string, notes: Note[]): Promise<{ note: Note, similarity: number }[]> {

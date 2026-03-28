@@ -280,20 +280,9 @@ function buildChatCompletionsBody(params: GatewayParams) {
   if (Array.isArray(config.stopSequences) && config.stopSequences.length > 0) body.stop = config.stopSequences;
 
   if (config.responseMimeType === 'application/json') {
-    if (config.responseSchema && typeof config.responseSchema === 'object') {
-      // 转换 Google GenAI Type 枚举为标准 JSON Schema
-      const standardSchema = convertGoogleGenAISchemaToStandard(config.responseSchema);
-      body.response_format = {
-        type: 'json_schema',
-        json_schema: {
-          name: 'opensynapse_structured_output',
-          schema: standardSchema,
-          strict: true,
-        },
-      };
-    } else {
-      body.response_format = { type: 'json_object' };
-    }
+    // 对于 OpenAI 兼容 API，使用 json_object 类型而不是复杂的 json_schema
+    // 因为并非所有提供商（如智谱）都支持严格的 json_schema 格式
+    body.response_format = { type: 'json_object' };
   }
 
   return body;
