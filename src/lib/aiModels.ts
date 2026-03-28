@@ -311,6 +311,33 @@ export const EMBEDDING_MODEL_OPTIONS: AIModelOption[] = [
     lifecycle: 'preview',
     docsUrl: 'https://ai.google.dev/gemini-api/docs/embeddings',
   },
+  {
+    id: 'openai/text-embedding-3-small',
+    provider: 'openai',
+    model: 'text-embedding-3-small',
+    label: 'OpenAI Text Embedding 3 Small',
+    description: 'OpenAI 高性价比 embedding 模型，1536 维，适合大规模语义搜索。',
+    lifecycle: 'stable',
+    docsUrl: 'https://platform.openai.com/docs/guides/embeddings',
+  },
+  {
+    id: 'openai/text-embedding-3-large',
+    provider: 'openai',
+    model: 'text-embedding-3-large',
+    label: 'OpenAI Text Embedding 3 Large',
+    description: 'OpenAI 高精度 embedding 模型，3072 维，适合精度优先场景。',
+    lifecycle: 'stable',
+    docsUrl: 'https://platform.openai.com/docs/guides/embeddings',
+  },
+  {
+    id: 'zhipu/embedding-3',
+    provider: 'zhipu',
+    model: 'embedding-3',
+    label: '智谱 Embedding 3',
+    description: '智谱 GLM embedding 模型，2048 维，中文语义表现优秀。',
+    lifecycle: 'stable',
+    docsUrl: 'https://open.bigmodel.cn/dev/api/vector/embedding-3',
+  },
 ];
 
 export const MODEL_FALLBACKS: Record<string, string[]> = {

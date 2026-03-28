@@ -5,6 +5,7 @@ import { generateContentWithCodeAssist, generateContentStreamWithCodeAssist } fr
 import {
   generateContentStreamWithApiKeyProvider,
   generateContentWithApiKeyProvider,
+  embedContentWithApiKeyProvider,
 } from '../lib/providerGateway.js';
 import {
   DEFAULT_EMBEDDING_MODEL,
@@ -376,14 +377,44 @@ router.post('/embedContent', requireAuth(async (req, res, userId) => {
   );
 
   if (parsed.provider !== 'gemini') {
-    res.json({
-      embeddings: [{ values: [] }],
-      degraded: true,
-      reason: `当前仅支持 Gemini embedding，已跳过 ${parsed.canonicalId}。`,
-    });
+    try {
+      const resolvedCredentials = await resolveProviderCredentialsFromRequest(
+        req, getAuthorizationHeader(req), parsed.provider
+      );
+
+      if (!resolvedCredentials.apiKey) {
+        res.json({
+          embeddings: [{ values: [] }],
+          degraded: true,
+          reason: `当前未配置 ${parsed.provider} 的 API Key，embedding 已优雅降级。`,
+        });
+        return;
+      }
+
+      const contents: string[] = Array.isArray(req.body?.contents)
+        ? req.body.contents.map((c: any) => typeof c === 'string' ? c : String(c?.text ?? c ?? ''))
+        : [String(req.body?.contents ?? '')];
+
+      const result = await withProviderCredentials(parsed.provider, resolvedCredentials, () =>
+        embedContentWithApiKeyProvider({
+          model: parsed.canonicalId,
+          contents,
+        })
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('[AI] Embed Content Error (non-Gemini):', error);
+      res.json({
+        embeddings: [{ values: [] }],
+        degraded: true,
+        reason: `Embedding 失败 (${parsed.provider}): ${error.message}`,
+      });
+    }
     return;
   }
 
+  // Gemini embedding path
   const resolvedGeminiApiKey = (await resolveProviderCredentialsFromRequest(req, getAuthorizationHeader(req), 'gemini')).apiKey;
 
   if (!resolvedGeminiApiKey) {

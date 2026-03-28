@@ -765,3 +765,71 @@ export async function* generateContentStreamWithApiKeyProvider(
 
   yield* streamChatCompletions(parsed.provider, parsed.canonicalId, buildChatCompletionsBody(params));
 }
+
+export type EmbedContentResult = {
+  embeddings: Array<{ values: number[] }>;
+};
+
+function toEmbeddingEndpoint(providerId: AIProviderId): string {
+  const provider = getResolvedProviderConfig(`${providerId}/placeholder`);
+  if (!provider.baseUrl) {
+    throw new Error(`Provider ${provider.label} 未配置 API 基础地址，无法调用 embedding。`);
+  }
+  return joinUrl(provider.baseUrl, '/embeddings');
+}
+
+export async function embedContentWithApiKeyProvider(params: {
+  model: string;
+  contents: string[];
+}): Promise<EmbedContentResult> {
+  const parsed = parseModelSelection(params.model);
+  if (parsed.provider === 'gemini') {
+    throw new Error('embedContentWithApiKeyProvider 不能处理 Gemini provider，请使用 Gemini SDK。');
+  }
+
+  const provider = getResolvedProviderConfig(parsed.canonicalId);
+  if (provider.protocol !== 'openai_compat') {
+    throw new Error(
+      `Provider ${provider.label} 使用 ${provider.protocol} 协议，暂不支持 embedding。` +
+      `仅 openai_compat 协议提供商（OpenAI、智谱等）支持 embedding。`
+    );
+  }
+
+  const { apiKey } = getRequiredApiKey(parsed.canonicalId);
+  const bareModel = getApiModelId(parsed.canonicalId);
+  const endpoint = toEmbeddingEndpoint(parsed.provider);
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: bareModel,
+      input: params.contents,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Embedding 请求失败 (${parsed.provider}/${bareModel}): ` +
+      `${response.status} ${response.statusText} - ${errorText}`
+    );
+  }
+
+  const payload = await response.json();
+  const dataItems = payload?.data;
+  if (!Array.isArray(dataItems) || dataItems.length === 0) {
+    throw new Error(
+      `Embedding 响应格式异常：未返回 data 数组。provider=${parsed.provider} model=${bareModel}`
+    );
+  }
+
+  const embeddings = dataItems.map((item: { embedding?: number[] }) => ({
+    values: Array.isArray(item.embedding) ? item.embedding : [],
+  }));
+
+  return { embeddings };
+}
