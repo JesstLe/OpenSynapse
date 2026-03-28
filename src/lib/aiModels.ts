@@ -79,6 +79,7 @@ export const DEFAULT_TEXT_MODEL = 'gemini/gemini-2.5-flash';
 export const DEFAULT_STRUCTURED_MODEL = 'gemini/gemini-2.5-flash';
 export const EMBEDDING_MODEL = 'gemini-embedding-2-preview';
 export const TEXT_MODEL_STORAGE_KEY = 'opensynapse.preferred-text-model';
+export const STRUCTURED_MODEL_STORAGE_KEY = 'opensynapse.preferred-structured-model';
 
 export const AI_MODEL_OPTIONS: AIModelOption[] = [
   {
@@ -372,10 +373,26 @@ export function getPreferredTextModel(): string {
   return normalizeModelId(window.localStorage.getItem(TEXT_MODEL_STORAGE_KEY));
 }
 
+export function getPreferredStructuredModel(): string {
+  if (!canUseLocalStorage()) {
+    return DEFAULT_STRUCTURED_MODEL;
+  }
+
+  return normalizeModelId(window.localStorage.getItem(STRUCTURED_MODEL_STORAGE_KEY));
+}
+
 export function setPreferredTextModel(modelId: string): string {
   const normalized = normalizeModelId(modelId);
   if (canUseLocalStorage()) {
     window.localStorage.setItem(TEXT_MODEL_STORAGE_KEY, normalized);
+  }
+  return normalized;
+}
+
+export function setPreferredStructuredModel(modelId: string): string {
+  const normalized = normalizeModelId(modelId);
+  if (canUseLocalStorage()) {
+    window.localStorage.setItem(STRUCTURED_MODEL_STORAGE_KEY, normalized);
   }
   return normalized;
 }

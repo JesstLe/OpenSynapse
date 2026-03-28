@@ -1,6 +1,6 @@
 import { Type } from "@google/genai";
 import { Note, Flashcard, ChatMessage, Persona } from "../types";
-import { DEFAULT_STRUCTURED_MODEL, EMBEDDING_MODEL, getPreferredTextModel } from "../lib/aiModels";
+import { EMBEDDING_MODEL, getPreferredStructuredModel, getPreferredTextModel } from "../lib/aiModels";
 import { PRESET_PERSONAS, DEFAULT_PERSONA_ID } from "../lib/personas";
 
 // ─── 流式 chunk 类型定义 ───
@@ -241,7 +241,7 @@ export async function findRelevantNotes(query: string, notes: Note[], limit: num
 // ─── 知识提炼 ───
 
 export async function processConversation(chatHistory: string[]): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
-  const modelId = DEFAULT_STRUCTURED_MODEL;
+  const modelId = getPreferredStructuredModel();
   const prompt = `你是一位严谨的计算机科学导师。请分析以下对话，提取出核心知识点。
   
   对于每一个知识点，请生成：
@@ -297,7 +297,7 @@ export async function processConversation(chatHistory: string[]): Promise<{ note
 }
 
 export async function findSemanticLinks(newNote: Note, existingNotes: Note[]): Promise<string[]> {
-  const modelId = DEFAULT_STRUCTURED_MODEL;
+  const modelId = getPreferredStructuredModel();
   if (existingNotes.length === 0) return [];
   
   if (newNote.embedding) {
@@ -334,7 +334,7 @@ export async function findSemanticLinks(newNote: Note, existingNotes: Note[]): P
 }
 
 export async function deconstructScannedDocument(base64Image: string): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
-  const modelId = DEFAULT_STRUCTURED_MODEL;
+  const modelId = getPreferredStructuredModel();
   const prompt = `你是一位顶尖的知识架构师。请分析这张扫描文档或图片的页面内容，并将其"解构"为结构化的知识资产。
   
   请提取出最核心的一个知识点，并生成：
@@ -392,7 +392,7 @@ export async function deconstructScannedDocument(base64Image: string): Promise<{
 }
 
 export async function deconstructTOC(text: string): Promise<{ chapters: { title: string, startPage: number, endPage: number, summary: string }[] }> {
-  const modelId = DEFAULT_STRUCTURED_MODEL;
+  const modelId = getPreferredStructuredModel();
   const prompt = `你是一位顶尖的知识架构师。请分析以下教材或文档的前几页内容，提取出其目录结构。
   
   请识别出最核心的 5-8 个章节，并为每个章节提供标题、起始/结束页码、核心知识点简述。
@@ -432,7 +432,7 @@ export async function deconstructTOC(text: string): Promise<{ chapters: { title:
 }
 
 export async function deconstructUrl(url: string): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
-  const modelId = DEFAULT_STRUCTURED_MODEL;
+  const modelId = getPreferredStructuredModel();
   const prompt = `你是一位顶尖的知识架构师。请访问并深度解构以下 URL 的内容：${url}。
   
   请提取出最核心的一个知识点，并生成：
@@ -494,7 +494,7 @@ export interface BreakthroughConfig {
 }
 
 export async function analyzeKnowledgeGaps(tag: string, cards: Flashcard[]): Promise<string[]> {
-  const modelId = DEFAULT_STRUCTURED_MODEL;
+  const modelId = getPreferredStructuredModel();
   const prompt = `你是一位教育心理学家和计算机科学专家。
   用户在 [${tag}] 领域的以下知识点上遇到了困难：
   ${cards.map(c => `- Q: ${c.question}\n  A: ${c.answer}`).join('\n')}
@@ -586,7 +586,7 @@ ${contextText}
 }
 
 export async function deconstructDocument(text: string): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
-  const modelId = DEFAULT_STRUCTURED_MODEL;
+  const modelId = getPreferredStructuredModel();
   const prompt = `你是一位顶尖的知识架构师。请将以下长文档"解构"为结构化的知识资产。
   
   请提取出最核心的一个知识点，并生成：

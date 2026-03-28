@@ -37,6 +37,12 @@
 |------|------|----------|
 | [gemini-like-chat-implementation.md](./features/gemini-like-chat-implementation.md) | Gemini 风格聊天实现方案 | 改进聊天体验 |
 | [multi-provider-models.md](./features/multi-provider-models.md) | 多 Provider 模型接入说明 | 维护模型列表与鉴权策略 |
+| [language-learning-voice-design.md](./features/language-learning-voice-design.md) | 语言学习与语音交互设计 | 规划英语/口语/语音训练与掌握算法 |
+| [maimemo-memory-algorithm-borrowings.md](./features/maimemo-memory-algorithm-borrowings.md) | 墨墨算法借鉴分析 | 研究墨墨记忆算法与可借鉴点 |
+| [language-memory-engine-implementation-plan.md](./features/language-memory-engine-implementation-plan.md) | 语言学习记忆引擎实现方案 | 落地数据结构、评分维度与调度算法 |
+| [ai-tutor-system-design.md](./features/ai-tutor-system-design.md) | AI 智能导师系统设计 | 规划教学策略、导师状态与人格联动 |
+| [knowledge-recommendation-engine-design.md](./features/knowledge-recommendation-engine-design.md) | 知识推荐引擎设计 | 规划知识点推荐、排序与图谱联动 |
+| [learning-path-planning-design.md](./features/learning-path-planning-design.md) | 学习路径规划设计 | 规划路径节点、前置依赖与动态推进 |
 
 ### 📋 项目规划
 
@@ -70,7 +76,14 @@ OpenSynapse/
 │   ├── business/            # 💰 商业化文档
 │   │   └── monetization-billing-architecture.md
 │   └── features/            # ✨ 功能文档
-│       └── gemini-like-chat-implementation.md
+│       ├── gemini-like-chat-implementation.md
+│       ├── multi-provider-models.md
+│       ├── language-learning-voice-design.md
+│       ├── maimemo-memory-algorithm-borrowings.md
+│       ├── language-memory-engine-implementation-plan.md
+│       ├── ai-tutor-system-design.md
+│       ├── knowledge-recommendation-engine-design.md
+│       └── learning-path-planning-design.md
 │
 ├── scripts/                 # 🛠️ 工具脚本
 │   ├── cli.ts               # CLI 主程序

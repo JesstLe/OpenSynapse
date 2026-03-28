@@ -4,8 +4,8 @@
  */
 
 import admin from 'firebase-admin';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 let firebaseAdmin: typeof admin | null = null;
 
@@ -28,8 +28,8 @@ export function initializeFirebaseAdmin() {
     } else {
       // 尝试从本地文件读取（开发环境）
       try {
-        const keyPath = join(process.cwd(), 'config', 'firebase-service-account.json');
-        const serviceAccount = JSON.parse(readFileSync(keyPath, 'utf-8'));
+        const keyPath = path.join(process.cwd(), 'config', 'firebase-service-account.json');
+        const serviceAccount = JSON.parse(fs.readFileSync(keyPath, 'utf-8'));
         admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),
           databaseURL: process.env.FIREBASE_DATABASE_URL,

@@ -4,6 +4,11 @@ import { Check, X, RotateCcw, Brain, ChevronRight, Trophy, Network } from 'lucid
 import { Flashcard, Note } from '../types';
 import { cn } from '../lib/utils';
 import { schedule, Rating, predictNextReview, getIntervalString } from '../services/fsrs';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import MiniGraph from './MiniGraph';
 
 interface ReviewViewProps {
@@ -92,14 +97,22 @@ export default function ReviewView({ flashcards, notes, onBackToDashboard, onRev
           {/* Front */}
           <div className="absolute inset-0 bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-8 md:p-12 flex flex-col items-center justify-center text-center backface-hidden shadow-2xl">
             <div className="absolute top-6 left-6 md:top-8 md:left-8 text-[10px] uppercase tracking-[0.2em] font-black text-accent opacity-50">问题</div>
-            <h3 className="text-xl md:text-2xl font-medium leading-relaxed text-text-main">{currentCard.question}</h3>
+            <div className="text-xl md:text-2xl font-medium leading-relaxed text-text-main MarkdownCardWrapper">
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                {currentCard.question}
+              </ReactMarkdown>
+            </div>
             <div className="absolute bottom-6 md:bottom-8 text-[10px] md:text-xs text-text-muted font-bold uppercase tracking-widest animate-pulse">点击显示答案</div>
           </div>
 
           {/* Back */}
           <div className="absolute inset-0 bg-card border border-accent/30 rounded-[24px] md:rounded-[32px] p-8 md:p-12 flex flex-col items-center justify-center text-center backface-hidden shadow-2xl [transform:rotateY(180deg)]">
             <div className="absolute top-6 left-6 md:top-8 md:left-8 text-[10px] uppercase tracking-[0.2em] font-black text-green-500/50">答案</div>
-            <p className="text-lg md:text-xl text-text-sub leading-relaxed">{currentCard.answer}</p>
+            <div className="text-lg md:text-xl text-text-sub leading-relaxed MarkdownCardWrapper">
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                {currentCard.answer}
+              </ReactMarkdown>
+            </div>
           </div>
         </motion.div>
 

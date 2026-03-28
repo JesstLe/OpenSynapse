@@ -67,7 +67,32 @@ function getUserFacingAiError(error: unknown): string {
   return '抱歉，我遇到了错误。请重试。';
 }
 
+// 思考过程组件，处理自动滚动
+function ThoughtProcess({ thought, isStreaming }: { thought: string; isStreaming: boolean }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    if (isStreaming && detailsRef.current) {
+      // 只有在流式输出且内容变化时，自动滚动到底部
+      detailsRef.current.scrollTop = detailsRef.current.scrollHeight;
+    }
+  }, [thought, isStreaming]);
+
+  return (
+    <details 
+      ref={detailsRef}
+      className="mb-1 w-full text-xs text-text-muted bg-tertiary border border-border-main rounded-xl p-2 max-h-48 overflow-y-auto"
+      // 流式输出时默认打开
+      {...(isStreaming ? { open: true } : {})}
+    >
+      <summary className="cursor-pointer font-bold select-none opacity-60">💭 思考过程</summary>
+      <div className="mt-2 whitespace-pre-wrap font-mono text-[11px] leading-relaxed opacity-50">{thought}</div>
+    </details>
+  );
+}
+
 export default function ChatView({
+
   notes,
   chatSessions,
   userId,
@@ -711,7 +736,7 @@ export default function ChatView({
         />
       )}
 
-      <div className="flex flex-col h-full max-w-4xl mx-auto w-full relative">
+      <div className="flex flex-col h-full max-w-5xl xl:max-w-6xl mx-auto w-full relative">
         {/* Header */}
         <div className="p-6 border-b border-border-main flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-primary/80 backdrop-blur-md sticky top-0 z-10">
           <div className="flex items-center gap-4 text-text-main">
@@ -810,11 +835,8 @@ export default function ChatView({
         </div>
 
       {/* Messages */}
-      <div 
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide relative"
-      >
-        <AnimatePresence>
+      
+      <AnimatePresence>
           {(isProcessing || isDeconstructing || isAssetProcessing) && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -894,6 +916,11 @@ export default function ChatView({
             </motion.div>
           )}
         </AnimatePresence>
+
+      <div 
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide relative"
+      >
         {messages.map((msg, i) => (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -906,10 +933,10 @@ export default function ChatView({
           >
             {/* 思考过程折叠展示 */}
             {msg.role === 'model' && msg.thought && showThinking && (
-              <details className="mb-1 w-full text-xs text-text-muted bg-tertiary border border-border-main rounded-xl p-2 max-h-48 overflow-y-auto">
-                <summary className="cursor-pointer font-bold select-none opacity-60">💭 思考过程</summary>
-                <div className="mt-2 whitespace-pre-wrap font-mono text-[11px] leading-relaxed opacity-50">{msg.thought}</div>
-              </details>
+              <ThoughtProcess 
+                thought={msg.thought} 
+                isStreaming={isLoading && i === messages.length - 1} 
+              />
             )}
             <div className={cn(
               "px-4 py-3 rounded-2xl text-sm leading-relaxed group/msg relative",
@@ -1116,7 +1143,7 @@ export default function ChatView({
       </AnimatePresence>
     {/* Input Section */}
       <div className="p-4 bg-primary/80 backdrop-blur-md border-t border-border-main pb-8">
-        <div className="max-w-4xl mx-auto flex flex-col gap-3">
+        <div className="max-w-5xl xl:max-w-6xl mx-auto flex flex-col gap-3">
           
           <AnimatePresence>
             {showUrlInput && (

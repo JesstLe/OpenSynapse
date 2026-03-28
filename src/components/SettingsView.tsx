@@ -24,7 +24,12 @@ import {
   User as UserIcon,
   Globe
 } from 'lucide-react';
-import { AI_PROVIDERS, } from '../lib/aiModels';
+import {
+  AI_MODEL_OPTIONS,
+  AI_PROVIDERS,
+  getPreferredStructuredModel,
+  setPreferredStructuredModel as persistPreferredStructuredModel,
+} from '../lib/aiModels';
 import { Note, Flashcard, ChatSession, Persona } from '../types';
 import { DEFAULT_PERSONA_ID } from '../lib/personas';
 import { cn } from '../lib/utils';
@@ -120,6 +125,7 @@ export default function SettingsView({
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [structuredModel, setStructuredModel] = useState(() => getPreferredStructuredModel());
 
   const [userApiKeys, setUserApiKeys] = useState<UserApiKeys | null>(null);
   const [isLoadingUserKeys, setIsLoadingUserKeys] = useState(false);
@@ -139,6 +145,16 @@ export default function SettingsView({
   const [connectedProviders, setConnectedProviders] = useState<string[]>([]);
   const [isLoadingProviders, setIsLoadingProviders] = useState(false);
   const [isUnlinking, setIsUnlinking] = useState<string | null>(null);
+
+  const structuredModelOptions = useMemo(
+    () => AI_MODEL_OPTIONS.filter((option) => !option.model.toLowerCase().includes('embedding')),
+    []
+  );
+
+  const structuredModelLabel = useMemo(
+    () => structuredModelOptions.find((option) => option.id === structuredModel)?.label ?? structuredModel,
+    [structuredModel, structuredModelOptions]
+  );
 
   const hasUnsavedChanges = useMemo(
     () => Object.values(draftValues).some((value) => value.trim().length > 0),
@@ -514,6 +530,13 @@ export default function SettingsView({
     return connectedProviders.includes(provider);
   };
 
+  const handleSaveStructuredModel = () => {
+    setError(null);
+    const savedModel = persistPreferredStructuredModel(structuredModel);
+    setStructuredModel(savedModel);
+    setFeedback(`知识提炼模型已保存为：${savedModel}`);
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-6 md:p-10 bg-primary text-text-main">
       <div className="max-w-5xl mx-auto space-y-8">
@@ -642,6 +665,44 @@ export default function SettingsView({
                 退出
               </button>
             </div>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-border-main bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <BrainCircuit className="w-5 h-5 text-accent" />
+            <h3 className="font-bold text-lg">知识提炼模型</h3>
+          </div>
+          <p className="text-sm text-text-sub leading-relaxed mb-4">
+            选择用于知识提炼、文档解构等结构化输出的模型。
+          </p>
+
+          <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-widest text-text-muted">模型选择</label>
+              <select
+                value={structuredModel}
+                onChange={(e) => setStructuredModel(e.target.value)}
+                className="w-full rounded-2xl border border-border-main bg-secondary px-4 py-3 text-sm text-text-main outline-none focus:border-accent/40"
+              >
+                {structuredModelOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label} ({option.id})
+                  </option>
+                ))}
+              </select>
+              <div className="text-xs text-text-muted">
+                当前选择：<code>{structuredModelLabel}</code> · <code>{structuredModel}</code>
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveStructuredModel}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-bold text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover"
+            >
+              <Save className="w-4 h-4" />
+              保存
+            </button>
           </div>
         </div>
 

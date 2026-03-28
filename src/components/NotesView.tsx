@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { Search, Tag, Calendar, Code, Trash2, ExternalLink, ChevronRight, BookOpen, Sparkles, LayoutDashboard, BrainCircuit, Loader2, Filter, X, ChevronDown, ChevronUp, Edit3, Save } from 'lucide-react';
 import { Note } from '../types';
 import { cn } from '../lib/utils';
@@ -429,7 +432,12 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
                 <section>
                   <h2 className="text-xs uppercase tracking-[0.3em] font-black text-text-muted opacity-40 mb-4">深度解析</h2>
                   <div className="prose dark:prose-invert max-w-none text-text-sub leading-loose prose-headings:text-text-main prose-strong:text-text-main prose-code:text-accent prose-code:bg-accent/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-secondary prose-pre:border prose-pre:border-border-main prose-pre:rounded-2xl prose-a:text-accent prose-a:no-underline hover:prose-a:underline">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedNote.content}</ReactMarkdown>
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                    >
+                      {selectedNote.content}
+                    </ReactMarkdown>
                   </div>
                 </section>
 
