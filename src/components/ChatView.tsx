@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Send, Sparkles, Loader2, BrainCircuit, Image as ImageIcon, X, LayoutDashboard, History, Plus, Trash2, MessageSquare, FileText, FileUp, Link as LinkIcon, ChevronRight, BookOpen, Square, RefreshCw, Pencil, Copy, Check, Edit3, Download, Search, Filter, Gavel, TrendingUp, Sigma, ShieldAlert } from 'lucide-react';
 import { ChatMessage, Note, Flashcard, ChatSession, Persona } from '../types';
-import { PRESET_PERSONAS, DEFAULT_PERSONA_ID, deobfuscate, HIDDEN_PERSONA_PAYLOAD } from '../lib/personas';
+import { PRESET_PERSONAS, DEFAULT_PERSONA_ID, getCSTutorPersona } from '../lib/personas';
 import { chatWithAI, chatWithAIStream, processConversation, BreakthroughConfig, startBreakthroughChat, startBreakthroughChatStream, deconstructDocument, deconstructUrl, deconstructScannedDocument, deconstructTOC, type StreamChunk } from '../services/gemini';
 import { cn } from '../lib/utils';
 import { AI_MODEL_OPTIONS, getModelOption, getPreferredTextModel, isKnownTextModel, setPreferredTextModel } from '../lib/aiModels';
@@ -112,16 +112,7 @@ export default function ChatView({
   const allAvailablePersonas: Persona[] = [
     ...PRESET_PERSONAS.filter(p => !p.isHidden),
     ...customPersonas,
-    ...(showHiddenPersonas ? [{
-      id: 'hidden-shadow',
-      name: '影子分身',
-      icon: 'ShieldAlert',
-      description: '极度坦诚的私人建议。',
-      systemPrompt: deobfuscate(HIDDEN_PERSONA_PAYLOAD),
-      category: 'hidden' as const,
-      isLocked: true,
-      isHidden: true
-    }] : [])
+    ...(showHiddenPersonas ? [getCSTutorPersona()] : [])
   ];
 
   const currentPersona = allAvailablePersonas.find(p => p.id === selectedPersonaId) || allAvailablePersonas[0];
@@ -1240,7 +1231,7 @@ export default function ChatView({
                     handleSend();
                   }
                 }}
-                placeholder={currentPersona.id === 'hidden-shadow' ? "指示你的分身..." : `以${currentPersona.name}的身份交流...`}
+                placeholder={`以${currentPersona.name}的身份交流...`}
                 className="w-full bg-transparent border-none p-2 text-sm text-text-main placeholder:text-text-muted focus:outline-none resize-none min-h-[40px]"
               />
               

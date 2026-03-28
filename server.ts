@@ -38,6 +38,20 @@ async function startServer() {
     startedAt?: number;
     completedAt?: number;
   } = { status: 'idle' };
+  let openAIOAuthCallbackServer: Awaited<ReturnType<typeof startOpenAICodexCallbackServer>> | null = null;
+
+  const closeOpenAIOAuthCallbackServer = () => {
+    if (!openAIOAuthCallbackServer) {
+      return;
+    }
+    try {
+      openAIOAuthCallbackServer.close();
+    } catch {
+      // Ignore close failures for stale callback servers.
+    } finally {
+      openAIOAuthCallbackServer = null;
+    }
+  };
 
   app.use(express.json({ limit: '50mb' }));
 
@@ -142,9 +156,12 @@ async function startServer() {
       return res.status(404).json({ error: 'Settings API unavailable in production.' });
     }
 
-    if (openAIOAuthFlow.status === 'pending' && openAIOAuthFlow.authUrl) {
+    if (openAIOAuthFlow.status === 'pending' && openAIOAuthFlow.authUrl && openAIOAuthCallbackServer) {
       return res.json(openAIOAuthFlow);
     }
+
+    closeOpenAIOAuthCallbackServer();
+    openAIOAuthFlow = { status: 'idle' };
 
     const flow = await createOpenAICodexAuthorizationFlow();
     const callbackServer = await startOpenAICodexCallbackServer(flow.state);
@@ -153,6 +170,7 @@ async function startServer() {
         error: '无法监听 http://localhost:1455/auth/callback，请确认该端口未被占用后重试。',
       });
     }
+    openAIOAuthCallbackServer = callbackServer;
 
     openAIOAuthFlow = {
       status: 'pending',
@@ -181,7 +199,7 @@ async function startServer() {
           completedAt: Date.now(),
         };
       } finally {
-        callbackServer.close();
+        closeOpenAIOAuthCallbackServer();
       }
     })();
 
@@ -195,6 +213,7 @@ async function startServer() {
 
     const hadOwnCredentials = await clearOpenAICodexCredentials();
     const fallbackSession = await loadOpenAICodexSession();
+    closeOpenAIOAuthCallbackServer();
     openAIOAuthFlow = { status: 'idle' };
 
     if (!hadOwnCredentials && fallbackSession?.source === 'codex') {
@@ -209,6 +228,9 @@ async function startServer() {
       message: hadOwnCredentials ? 'OpenSynapse 专属 OpenAI OAuth 凭证已清除。' : '当前没有 OpenSynapse 专属 OpenAI OAuth 凭证。',
     });
   });
+
+  process.once('SIGINT', closeOpenAIOAuthCallbackServer);
+  process.once('SIGTERM', closeOpenAIOAuthCallbackServer);
 
   // API Routes
   app.use('/api/ai', aiRouter);
