@@ -93,6 +93,8 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
 - `src/services/importParsers.ts`
   - 对话导入解析器
   - 支持 JSON / Markdown / 纯文本自动检测
+  - ChatGPT 官方导出格式（mapping/chat_messages/data 数组）
+  - 自定义格式导入（用户可定义角色标记）
   - 去重检测与会话转换
 
 ### Data Layer
@@ -400,9 +402,17 @@ firebase deploy --only firestore:rules
 
 非 Gemini provider（OpenAI/MiniMax/智谱/Moonshot）：
 
-- 某些高级功能（如 embedding）可能不可用
-- 结构化 JSON 输出格式可能有差异
-- 流式响应的 chunk 格式需适配
+- **Embedding 限制**：embedding 功能需要 Gemini API Key。使用其他提供商时，RAG 和语义搜索会优雅降级（返回空结果），不影响主要功能
+- **结构化 JSON 输出**：格式可能有差异，系统已添加 `safeJsonParse` 自动提取 JSON
+- **流式响应**：chunk 格式需适配，已完成 Gemini/OpenAI/MiniMax/智谱/Moonshot 的适配
+
+### Knowledge Extraction
+
+知识提炼功能现在支持所有 AI 提供商：
+
+- 使用 `safeJsonParse` 处理不同模型的 JSON 输出格式
+- 当使用非 Gemini 模型时，通过 prompt 明确要求 JSON 格式而非 schema 约束
+- `convertGoogleGenAISchemaToStandard` 函数处理 Google GenAI Type 枚举与标准 JSON Schema 的兼容
 
 ---
 
@@ -503,7 +513,7 @@ npx tsx cli.ts ./path/to/file.txt
 - FSRS 逻辑在 `src/services/fsrs.ts`
 - 知识图谱在 `src/components/GraphView.tsx`
 - 多导师人格在 `src/lib/personas.ts`
-- 对话导入在 `src/components/ImportDialog.tsx`，支持 JSON/Markdown/TXT/Gemini网页导出
+- 对话导入在 `src/components/ImportDialog.tsx`，支持 JSON/Markdown/TXT/Gemini网页导出/ChatGPT导出/自定义格式
 - 数学公式渲染在 `src/components/ChatView.tsx`（remark-math + rehype-katex）
 - 多提供商网关在 `src/lib/providerGateway.ts`
 - Web 主数据路径为 Firestore
