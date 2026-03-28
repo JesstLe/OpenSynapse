@@ -1,9 +1,9 @@
 import React from 'react';
-import { motion } from 'motion/react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area, BarChart, Bar, Cell
 } from 'recharts';
+import { motion, AnimatePresence } from 'motion/react';
 import { analyzeKnowledgeGaps } from '../services/gemini';
 import { Brain, Zap, TrendingUp, CheckCircle2, AlertCircle, Calendar, Download, Loader2, BrainCircuit } from 'lucide-react';
 import { Note, Flashcard, ChatSession } from '../types';
@@ -21,6 +21,7 @@ interface DashboardViewProps {
 export default function DashboardView({ notes, flashcards, chatSessions, onStartBreakthrough }: DashboardViewProps) {
   const [isExporting, setIsExporting] = React.useState(false);
   const [analyzingTag, setAnalyzingTag] = React.useState<string | null>(null);
+  const [hoveredDay, setHoveredDay] = React.useState<{ date: Date, count: number, dateStr: string, x: number, y: number } | null>(null);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -415,7 +416,7 @@ ${flashcards
         </div>
 
         {/* Learning Activity (GitHub Style) */}
-        <div className="bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-6 md:p-8 shadow-sm">
+        <div className="bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-6 md:p-8 shadow-sm relative activity-chart-container">
           <div className="flex items-center justify-between mb-8">
             <h3 className="font-bold text-base md:text-lg flex items-center gap-2 text-text-main">
               <Calendar size={18} className="text-green-500" />
@@ -424,11 +425,11 @@ ${flashcards
             <div className="flex items-center gap-2 text-[10px] text-text-muted font-bold uppercase tracking-widest opacity-60">
               <span>较少</span>
               <div className="flex gap-1">
-                <div className="w-2.5 h-2.5 rounded-sm bg-secondary" />
-                <div className="w-2.5 h-2.5 rounded-sm bg-green-500/20" />
-                <div className="w-2.5 h-2.5 rounded-sm bg-green-500/40" />
-                <div className="w-2.5 h-2.5 rounded-sm bg-green-500/60" />
-                <div className="w-2.5 h-2.5 rounded-sm bg-green-500/80" />
+                <div className="w-2.5 h-2.5 rounded-[2px] bg-secondary" />
+                <div className="w-2.5 h-2.5 rounded-[2px] bg-green-500/20" />
+                <div className="w-2.5 h-2.5 rounded-[2px] bg-green-500/40" />
+                <div className="w-2.5 h-2.5 rounded-[2px] bg-green-500/60" />
+                <div className="w-2.5 h-2.5 rounded-[2px] bg-green-500/80" />
               </div>
               <span>较多</span>
             </div>
@@ -438,23 +439,24 @@ ${flashcards
             {/* Day Labels */}
             <div className="grid grid-rows-7 gap-1 md:gap-2 text-[8px] font-black text-text-muted uppercase pt-5">
               <div className="h-2.5 md:h-3"></div>
-              <div className="h-2.5 md:h-3">Mon</div>
+              <div className="h-2.5 md:h-3">周一</div>
               <div className="h-2.5 md:h-3"></div>
-              <div className="h-2.5 md:h-3">Wed</div>
+              <div className="h-2.5 md:h-3">周三</div>
               <div className="h-2.5 md:h-3"></div>
-              <div className="h-2.5 md:h-3">Fri</div>
+              <div className="h-2.5 md:h-3">周五</div>
               <div className="h-2.5 md:h-3"></div>
             </div>
             
-            <div className="flex-1 overflow-x-auto scrollbar-hide">
+            <div className="flex-1 overflow-x-auto scrollbar-hide" onMouseLeave={() => setHoveredDay(null)}>
               {/* Month Labels */}
               <div className="flex mb-2 text-[8px] font-black text-text-muted uppercase">
                 {activityCalendar.map((week, i) => {
                   const firstDay = week[0].date;
-                  const showMonth = i === 0 || (firstDay.getDate() <= 7 && i > 0);
+                  const prevWeekMonth = i > 0 ? activityCalendar[i-1][0].date.getMonth() : -1;
+                  const showMonth = i === 0 || firstDay.getMonth() !== prevWeekMonth;
                   return (
                     <div key={i} className="flex-1 min-w-[14px]">
-                      {showMonth ? firstDay.toLocaleString('default', { month: 'short' }) : ''}
+                      {showMonth ? firstDay.toLocaleString('zh-CN', { month: 'short' }) : ''}
                     </div>
                   );
                 })}
@@ -462,23 +464,61 @@ ${flashcards
               
               <div className="grid grid-flow-col grid-rows-7 gap-1 md:gap-2">
                 {activityCalendar.map((week) => 
-                  week.map((day) => (
-                    <div 
-                      key={day.dateStr} 
-                      title={`${day.dateStr}: ${day.count} 次活动`}
-                      className={cn(
-                        "aspect-square w-2.5 h-2.5 md:w-3 md:h-3 rounded-sm md:rounded-md border border-border-main transition-all duration-300 hover:scale-125 hover:z-10",
-                        day.count === 0 ? "bg-secondary" :
-                        day.count <= 2 ? "bg-green-500/20" :
-                        day.count <= 5 ? "bg-green-500/40" :
-                        day.count <= 10 ? "bg-green-500/60" : "bg-green-500/80"
-                      )}
-                    />
-                  ))
+                  week.map((day) => {
+                    const isToday = day.dateStr === new Date().toISOString().split('T')[0];
+                    return (
+                      <div 
+                        key={day.dateStr} 
+                        onMouseEnter={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const containerRect = e.currentTarget.closest('.activity-chart-container')?.getBoundingClientRect();
+                          if (containerRect) {
+                            setHoveredDay({
+                              ...day,
+                              x: rect.left - containerRect.left + rect.width / 2,
+                              y: rect.top - containerRect.top
+                            });
+                          }
+                        }}
+                        className={cn(
+                          "aspect-square w-2.5 h-2.5 md:w-3 md:h-3 rounded-[2px] md:rounded-[3px] border border-border-main transition-all duration-300 hover:scale-125 hover:z-20 cursor-crosshair",
+                          day.count === 0 ? "bg-secondary" :
+                          day.count <= 2 ? "bg-green-500/20" :
+                          day.count <= 5 ? "bg-green-500/40" :
+                          day.count <= 10 ? "bg-green-500/60" : "bg-green-500/80",
+                          isToday ? "border-accent ring-1 ring-accent/30 shadow-[0_0_8px_rgba(59,130,246,0.3)]" : "border-border-main"
+                        )}
+                      />
+                    );
+                  })
                 )}
               </div>
             </div>
           </div>
+
+          <AnimatePresence>
+            {hoveredDay && (
+              <motion.div
+                initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                className="absolute z-50 px-3 py-2 bg-text-main text-bg-card text-[10px] rounded-lg shadow-xl pointer-events-none whitespace-nowrap"
+                style={{ 
+                  left: hoveredDay.x, 
+                  top: hoveredDay.y - 12 - (window.innerWidth < 768 ? 40 : 50),
+                  transform: 'translateX(-50%)' 
+                }}
+              >
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="font-bold opacity-70">
+                    {hoveredDay.date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}
+                  </span>
+                  <span className="text-sm font-black italic">{hoveredDay.count} 次活跃轨迹</span>
+                </div>
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-text-main rotate-45" />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>
