@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Send, Sparkles, Loader2, BrainCircuit, Image as ImageIcon, X, LayoutDashboard, History, Plus, Trash2, MessageSquare, FileText, FileUp, Link as LinkIcon, ChevronRight, BookOpen, Square, RefreshCw, Pencil, Copy, Check, Edit3, Download, Search, Filter, Gavel, TrendingUp, Sigma, ShieldAlert } from 'lucide-react';
@@ -1115,8 +1115,7 @@ export default function ChatView({
           </div>
         )}
       </AnimatePresence>
-
-      {/* Input Section */}
+    {/* Input Section */}
       <div className="p-4 bg-primary/80 backdrop-blur-md border-t border-border-main pb-8">
         <div className="max-w-4xl mx-auto flex flex-col gap-3">
           
