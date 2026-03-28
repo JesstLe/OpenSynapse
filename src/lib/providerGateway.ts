@@ -1,9 +1,14 @@
 import {
   AIProviderId,
   getApiModelId,
-  getProviderForModel,
+  getResolvedProviderConfig,
   parseModelSelection,
 } from './aiModels.js';
+import {
+  getValidOpenAICodexSession,
+  isOpenAICodexOAuthModel,
+  refreshOpenAICodexSession,
+} from './openaiCodexOAuth.js';
 
 export type GatewayParams = {
   model: string;
@@ -25,16 +30,35 @@ type OpenAITextBlock = { type: 'text'; text: string };
 type OpenAIImageBlock = { type: 'image_url'; image_url: { url: string } };
 type OpenAIContentBlock = OpenAITextBlock | OpenAIImageBlock;
 
+type OpenAICodexInputText = { type: 'input_text'; text: string };
+type OpenAICodexInputImage = { type: 'input_image'; image_url: string };
+type OpenAICodexInputBlock = OpenAICodexInputText | OpenAICodexInputImage;
+
+function hasApiKey(modelId: string): boolean {
+  const provider = getResolvedProviderConfig(modelId);
+  const envVar = provider.apiKeyEnvVar;
+  return Boolean(envVar && process.env[envVar]?.trim());
+}
+
 function getRequiredApiKey(modelId: string): { provider: string; envVar: string; apiKey: string } {
-  const provider = getProviderForModel(modelId);
+  const provider = getResolvedProviderConfig(modelId);
   const envVar = provider.apiKeyEnvVar;
   const apiKey = envVar ? process.env[envVar]?.trim() : '';
 
   if (!envVar || !apiKey) {
-    throw new Error(`当前模型需要配置 ${envVar || 'API Key'}。请在 .env.local 中设置后重启服务。`);
+    throw new Error(`当前模型需要配置 ${envVar || 'API Key'}。请在设置页或 .env.local 中设置后重启服务。`);
   }
 
   return { provider: provider.label, envVar, apiKey };
+}
+
+function getOpenAIAuthorizationHint(modelId: string): string {
+  const bareModel = getApiModelId(modelId);
+  if (isOpenAICodexOAuthModel(modelId)) {
+    return `当前 OpenAI 模型 ${bareModel} 支持 Codex OAuth 或 OPENAI_API_KEY。请先在设置页完成 OpenAI OAuth 登录，或配置 OPENAI_API_KEY。`;
+  }
+
+  return `当前 OpenAI 模型 ${bareModel} 需要 OPENAI_API_KEY；如果想使用 OAuth，请切换到 gpt-5.2 / gpt-5.1 / Codex 模型。`;
 }
 
 function toGeminiContentsArray(contents: unknown): Array<Record<string, unknown>> {
@@ -87,15 +111,43 @@ function toOpenAIContent(parts: unknown[]): string | OpenAIContentBlock[] {
       return [];
     });
 
-  if (
-    blocks.length === 1 &&
-    blocks[0].type === 'text' &&
-    typeof blocks[0].text === 'string'
-  ) {
+  if (blocks.length === 1 && blocks[0].type === 'text') {
     return blocks[0].text;
   }
 
   return blocks;
+}
+
+function toOpenAICodexContent(parts: unknown[]): OpenAICodexInputBlock[] {
+  const blocks: OpenAICodexInputBlock[] = (parts || [])
+    .filter(Boolean)
+    .flatMap<OpenAICodexInputBlock>((part) => {
+      if (typeof part === 'string') {
+        return [{ type: 'input_text', text: part }];
+      }
+
+      if (!part || typeof part !== 'object') {
+        return [{ type: 'input_text', text: String(part ?? '') }];
+      }
+
+      const typedPart = part as Record<string, unknown>;
+      if (typeof typedPart.text === 'string') {
+        return [{ type: 'input_text', text: typedPart.text }];
+      }
+
+      if (typedPart.inlineData && typeof typedPart.inlineData === 'object') {
+        const inlineData = typedPart.inlineData as Record<string, string>;
+        const mimeType = inlineData.mimeType;
+        const data = inlineData.data;
+        if (mimeType && data) {
+          return [{ type: 'input_image', image_url: `data:${mimeType};base64,${data}` }];
+        }
+      }
+
+      return [];
+    });
+
+  return blocks.length > 0 ? blocks : [{ type: 'input_text', text: '' }];
 }
 
 function toOpenAICompatibleMessages(params: GatewayParams): Array<Record<string, unknown>> {
@@ -118,6 +170,61 @@ function toOpenAICompatibleMessages(params: GatewayParams): Array<Record<string,
   }
 
   return messages;
+}
+
+function toOpenAICodexInput(params: GatewayParams): Array<Record<string, unknown>> {
+  return toGeminiContentsArray(params.contents).map((content) => {
+    const typedContent = content as { role?: string; parts?: unknown[] };
+    const role = typedContent.role === 'model'
+      ? 'assistant'
+      : typedContent.role === 'system'
+        ? 'developer'
+        : (typedContent.role || 'user');
+
+    return {
+      type: 'message',
+      role,
+      content: toOpenAICodexContent(Array.isArray(typedContent.parts) ? typedContent.parts : []),
+    };
+  });
+}
+
+function appendJsonInstruction(baseInstruction: string, responseSchema?: unknown): string {
+  if (responseSchema && typeof responseSchema === 'object') {
+    return `${baseInstruction}\n\n请仅输出一个合法 JSON 对象，并严格符合以下 schema：\n${JSON.stringify(responseSchema, null, 2)}`;
+  }
+  return `${baseInstruction}\n\n请仅输出一个合法 JSON 对象，不要添加额外解释。`;
+}
+
+function buildOpenAICodexInstructions(params: GatewayParams): string {
+  let instructions = typeof params.config?.systemInstruction === 'string' && params.config.systemInstruction.trim()
+    ? params.config.systemInstruction.trim()
+    : 'You are a helpful assistant. Follow the user instructions carefully.';
+
+  if (params.config?.responseMimeType === 'application/json') {
+    instructions = appendJsonInstruction(instructions, params.config?.responseSchema);
+  }
+
+  return instructions;
+}
+
+function buildOpenAICodexBody(params: GatewayParams): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: getApiModelId(params.model),
+    instructions: buildOpenAICodexInstructions(params),
+    input: toOpenAICodexInput(params),
+    store: false,
+    stream: true,
+    reasoning: { effort: 'medium', summary: 'auto' },
+    text: { verbosity: 'medium', format: { type: 'text' } },
+    include: ['reasoning.encrypted_content'],
+  };
+
+  if (typeof params.config?.temperature === 'number') body.temperature = params.config.temperature;
+  if (typeof params.config?.topP === 'number') body.top_p = params.config.topP;
+  if (typeof params.config?.maxOutputTokens === 'number') body.max_output_tokens = params.config.maxOutputTokens;
+
+  return body;
 }
 
 function buildChatCompletionsBody(params: GatewayParams) {
@@ -150,6 +257,30 @@ function buildChatCompletionsBody(params: GatewayParams) {
   return body;
 }
 
+function buildAnthropicBody(params: GatewayParams) {
+  const body: Record<string, unknown> = {
+    model: getApiModelId(params.model),
+    max_tokens: typeof params.config?.maxOutputTokens === 'number' ? params.config.maxOutputTokens : 4096,
+    messages: toOpenAICompatibleMessages(params).filter((message) => message.role !== 'system'),
+  };
+
+  if (typeof params.config?.systemInstruction === 'string' && params.config.systemInstruction.trim()) {
+    body.system = params.config.systemInstruction;
+  }
+
+  if (typeof params.config?.temperature === 'number') body.temperature = params.config.temperature;
+  if (typeof params.config?.topP === 'number') body.top_p = params.config.topP;
+  if (Array.isArray(params.config?.stopSequences) && params.config.stopSequences.length > 0) {
+    body.stop_sequences = params.config.stopSequences;
+  }
+
+  if (params.config?.responseMimeType === 'application/json') {
+    body.metadata = { expected_format: 'json' };
+  }
+
+  return body;
+}
+
 function extractChatCompletionText(payload: any): string {
   const message = payload?.choices?.[0]?.message;
   if (!message) return '';
@@ -172,12 +303,50 @@ function extractChatCompletionText(payload: any): string {
   return '';
 }
 
+function extractAnthropicText(payload: any): string {
+  const content = payload?.content;
+  if (!Array.isArray(content)) return '';
+
+  return content
+    .map((item: any) => (typeof item?.text === 'string' ? item.text : ''))
+    .join('');
+}
+
+function extractOpenAICodexText(payload: any): string {
+  const completed = payload?.response ?? payload;
+  const output = completed?.output;
+  if (!Array.isArray(output)) return '';
+
+  return output
+    .flatMap((item: any) => Array.isArray(item?.content) ? item.content : [])
+    .map((content: any) => (typeof content?.text === 'string' ? content.text : ''))
+    .filter(Boolean)
+    .join('');
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, '');
+}
+
+function trimLeadingSlash(value: string): string {
+  return value.replace(/^\/+/, '');
+}
+
+function joinUrl(baseUrl: string, path: string): string {
+  return `${trimTrailingSlash(baseUrl)}/${trimLeadingSlash(path)}`;
+}
+
 function toProviderEndpoint(providerId: AIProviderId): string {
-  const provider = getProviderForModel(`${providerId}/placeholder`);
+  const provider = getResolvedProviderConfig(`${providerId}/placeholder`);
   if (!provider.baseUrl) {
     throw new Error(`Provider ${provider.label} 未配置 API 基础地址。`);
   }
-  return `${provider.baseUrl}/chat/completions`;
+
+  if (provider.protocol === 'anthropic_compat') {
+    return joinUrl(provider.baseUrl, '/v1/messages');
+  }
+
+  return joinUrl(provider.baseUrl, '/chat/completions');
 }
 
 function parseApiErrorText(status: number, statusText: string, errorText: string): never {
@@ -207,6 +376,110 @@ async function requestChatCompletions(
   return {
     text: extractChatCompletionText(payload),
     raw: payload,
+  };
+}
+
+async function requestAnthropicCompletions(
+  providerId: AIProviderId,
+  modelId: string,
+  body: Record<string, unknown>
+): Promise<GatewayTextResult> {
+  const { apiKey } = getRequiredApiKey(modelId);
+  const response = await fetch(toProviderEndpoint(providerId), {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    parseApiErrorText(response.status, response.statusText, await response.text());
+  }
+
+  const payload = await response.json();
+  return {
+    text: extractAnthropicText(payload),
+    raw: payload,
+  };
+}
+
+async function fetchOpenAICodexResponse(body: Record<string, unknown>) {
+  let session = await getValidOpenAICodexSession();
+  if (!session) {
+    return null;
+  }
+
+  const doRequest = async (accessToken: string, accountId: string) => fetch('https://chatgpt.com/backend-api/codex/responses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'chatgpt-account-id': accountId,
+      'OpenAI-Beta': 'responses=experimental',
+      originator: 'codex_cli_rs',
+      accept: 'text/event-stream',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  let response = await doRequest(session.accessToken, session.accountId);
+  if ((response.status === 401 || response.status === 403) && session.refreshToken) {
+    session = await refreshOpenAICodexSession(session);
+    response = await doRequest(session.accessToken, session.accountId);
+  }
+
+  return response;
+}
+
+function shouldUseOpenAICodexOAuth(modelId: string): boolean {
+  return isOpenAICodexOAuthModel(modelId);
+}
+
+function isOpenAICodexFallbackCandidate(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return message.includes('404') || message.includes('Not Found') || message.includes('No capacity available');
+}
+
+async function requestOpenAICodexCompletions(params: GatewayParams): Promise<GatewayTextResult> {
+  const body = buildOpenAICodexBody(params);
+  const response = await fetchOpenAICodexResponse(body);
+
+  if (!response) {
+    throw new Error(getOpenAIAuthorizationHint(params.model));
+  }
+
+  if (!response.ok) {
+    parseApiErrorText(response.status, response.statusText, await response.text());
+  }
+
+  const rawText = await response.text();
+  let aggregatedText = '';
+  let completedPayload: any = null;
+
+  for (const line of rawText.split('\n')) {
+    if (!line.startsWith('data: ')) continue;
+    const data = line.slice(6).trim();
+    if (!data || data === '[DONE]') continue;
+
+    try {
+      const payload = JSON.parse(data);
+      if (payload?.type === 'response.output_text.delta' && typeof payload.delta === 'string') {
+        aggregatedText += payload.delta;
+      }
+      if (payload?.type === 'response.completed' || payload?.type === 'response.done') {
+        completedPayload = payload.response ?? payload;
+      }
+    } catch {
+      // Ignore malformed SSE frames.
+    }
+  }
+
+  return {
+    text: extractOpenAICodexText(completedPayload) || aggregatedText,
+    raw: completedPayload ?? rawText,
   };
 }
 
@@ -279,10 +552,149 @@ async function* streamChatCompletions(
   }
 }
 
+async function* streamAnthropicCompletions(
+  providerId: AIProviderId,
+  modelId: string,
+  body: Record<string, unknown>
+): AsyncGenerator<GatewayStreamChunk> {
+  const { apiKey } = getRequiredApiKey(modelId);
+  const response = await fetch(toProviderEndpoint(providerId), {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ...body, stream: true }),
+  });
+
+  if (!response.ok) {
+    parseApiErrorText(response.status, response.statusText, await response.text());
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const fallback = await requestAnthropicCompletions(providerId, modelId, body);
+    if (fallback.text) {
+      yield { text: fallback.text };
+    }
+    return;
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (!data || data === '[DONE]') continue;
+
+      try {
+        const payload = JSON.parse(data);
+        if (typeof payload?.delta?.text === 'string' && payload.delta.text) {
+          yield { text: payload.delta.text };
+        }
+      } catch {
+        // Ignore malformed SSE frames.
+      }
+    }
+  }
+}
+
+async function* streamOpenAICodexCompletions(params: GatewayParams): AsyncGenerator<GatewayStreamChunk> {
+  const body = buildOpenAICodexBody(params);
+  const response = await fetchOpenAICodexResponse(body);
+
+  if (!response) {
+    throw new Error(getOpenAIAuthorizationHint(params.model));
+  }
+
+  if (!response.ok) {
+    parseApiErrorText(response.status, response.statusText, await response.text());
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const fallback = await requestOpenAICodexCompletions(params);
+    if (fallback.text) {
+      yield { text: fallback.text };
+    }
+    return;
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalText = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (!data || data === '[DONE]') continue;
+
+      try {
+        const payload = JSON.parse(data);
+        if (payload?.type === 'response.output_text.delta' && typeof payload.delta === 'string') {
+          finalText += payload.delta;
+          yield { text: payload.delta };
+          continue;
+        }
+
+        if ((payload?.type === 'response.completed' || payload?.type === 'response.done') && !finalText) {
+          const completedText = extractOpenAICodexText(payload);
+          if (completedText) {
+            finalText = completedText;
+            yield { text: completedText };
+          }
+        }
+      } catch {
+        // Ignore malformed SSE frames.
+      }
+    }
+  }
+}
+
 export async function generateContentWithApiKeyProvider(params: GatewayParams): Promise<GatewayTextResult> {
   const parsed = parseModelSelection(params.model);
   if (parsed.provider === 'gemini') {
     throw new Error('generateContentWithApiKeyProvider 不能处理 Gemini provider。');
+  }
+
+  if (parsed.provider === 'openai') {
+    if (shouldUseOpenAICodexOAuth(parsed.canonicalId)) {
+      try {
+        return await requestOpenAICodexCompletions({ ...params, model: parsed.canonicalId });
+      } catch (error) {
+        if (!hasApiKey(parsed.canonicalId)) {
+          throw error;
+        }
+        if (!isOpenAICodexFallbackCandidate(error)) {
+          throw error;
+        }
+      }
+    } else if (!hasApiKey(parsed.canonicalId)) {
+      throw new Error(getOpenAIAuthorizationHint(parsed.canonicalId));
+    }
+  }
+
+  const provider = getResolvedProviderConfig(parsed.canonicalId);
+  if (provider.protocol === 'anthropic_compat') {
+    return requestAnthropicCompletions(parsed.provider, parsed.canonicalId, buildAnthropicBody(params));
   }
 
   return requestChatCompletions(parsed.provider, parsed.canonicalId, buildChatCompletionsBody(params));
@@ -294,6 +706,30 @@ export async function* generateContentStreamWithApiKeyProvider(
   const parsed = parseModelSelection(params.model);
   if (parsed.provider === 'gemini') {
     throw new Error('generateContentStreamWithApiKeyProvider 不能处理 Gemini provider。');
+  }
+
+  if (parsed.provider === 'openai') {
+    if (shouldUseOpenAICodexOAuth(parsed.canonicalId)) {
+      try {
+        yield* streamOpenAICodexCompletions({ ...params, model: parsed.canonicalId });
+        return;
+      } catch (error) {
+        if (!hasApiKey(parsed.canonicalId)) {
+          throw error;
+        }
+        if (!isOpenAICodexFallbackCandidate(error)) {
+          throw error;
+        }
+      }
+    } else if (!hasApiKey(parsed.canonicalId)) {
+      throw new Error(getOpenAIAuthorizationHint(parsed.canonicalId));
+    }
+  }
+
+  const provider = getResolvedProviderConfig(parsed.canonicalId);
+  if (provider.protocol === 'anthropic_compat') {
+    yield* streamAnthropicCompletions(parsed.provider, parsed.canonicalId, buildAnthropicBody(params));
+    return;
   }
 
   yield* streamChatCompletions(parsed.provider, parsed.canonicalId, buildChatCompletionsBody(params));

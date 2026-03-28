@@ -21,7 +21,7 @@ import {
   Sun,
   Moon
 } from 'lucide-react';
-import { Note, Flashcard, ChatMessage, ChatSession } from './types';
+import { Note, Flashcard, ChatMessage, ChatSession, Persona } from './types';
 import { chatWithAI, processConversation, findSemanticLinks, generateEmbedding, BreakthroughConfig, startBreakthroughChat } from './services/gemini';
 import { cn } from './lib/utils';
 import { schedule, Rating } from './services/fsrs';
@@ -81,17 +81,25 @@ interface FirestoreErrorInfo {
 }
 
 function sanitizeChatSession(session: ChatSession, userId: string) {
-  return {
+  const base: Record<string, any> = {
     id: session.id,
     title: session.title || '新会话',
-    messages: session.messages.map((message) =>
-      message.image
-        ? { role: message.role, text: message.text, image: message.image }
-        : { role: message.role, text: message.text }
-    ),
+    messages: session.messages.map((message) => {
+      const m: Record<string, any> = { role: message.role, text: message.text };
+      if (message.image) m.image = message.image;
+      if (message.thought) m.thought = message.thought;
+      return m;
+    }),
     updatedAt: session.updatedAt,
     userId,
   };
+  // 保留导入元数据（Firestore 不接受 undefined，仅写入有值的字段）
+  if (session.source) base.source = session.source;
+  if (session.importedAt) base.importedAt = session.importedAt;
+  if (session.fingerprint) base.fingerprint = session.fingerprint;
+  if (session.originalExportedAt) base.originalExportedAt = session.originalExportedAt;
+  if (session.personaId) base.personaId = session.personaId;
+  return base;
 }
 
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
@@ -131,6 +139,7 @@ export default function App() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [customPersonas, setCustomPersonas] = useState<Persona[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [user, setUser] = useState<User | null>(null);
@@ -147,6 +156,11 @@ export default function App() {
   });
   const isUsingDevAuthBypass = DEV_AUTH_BYPASS_ENABLED && !user;
   const effectiveUserId = user?.uid ?? (isUsingDevAuthBypass ? DEV_USER_ID : null);
+
+  const [showHiddenPersonas, setShowHiddenPersonas] = useState(() => {
+    return localStorage.getItem('os_show_hidden_personas') === 'true';
+  });
+  const logoClicks = useRef({ count: 0, lastTime: 0 });
 
   useEffect(() => {
     if (isDarkMode) {
@@ -424,18 +438,70 @@ export default function App() {
     );
   }
 
+  const handleSavePersona = async (persona: Persona) => {
+    if (isUsingDevAuthBypass || !effectiveUserId) {
+      setCustomPersonas(prev => [persona, ...prev.filter(p => p.id !== persona.id)]);
+      return;
+    }
+    try {
+      await setDoc(doc(db, 'custom_personas', persona.id), {
+        ...persona,
+        userId: effectiveUserId,
+        updatedAt: Date.now()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `custom_personas/${persona.id}`);
+    }
+  };
+
+  const handleDeletePersona = async (id: string) => {
+    if (isUsingDevAuthBypass || !effectiveUserId) {
+      setCustomPersonas(prev => prev.filter(p => p.id !== id));
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'custom_personas', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `custom_personas/${id}`);
+    }
+  };
+
   return (
     <div className="flex flex-col md:flex-row h-screen font-sans overflow-hidden transition-colors duration-300 bg-primary text-text-main">
       {/* Sidebar (Desktop) */}
       <nav className="hidden md:flex w-64 flex-col transition-colors duration-300 bg-sidebar border-r border-border-main">
         <div 
           className="p-6 flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity group"
-          onClick={() => setActiveView('dashboard')}
+          onClick={() => {
+            const now = Date.now();
+            if (now - logoClicks.current.lastTime < 500) {
+              logoClicks.current.count++;
+              if (logoClicks.current.count >= 7) {
+                const newState = !showHiddenPersonas;
+                setShowHiddenPersonas(newState);
+                localStorage.setItem('os_show_hidden_personas', newState.toString());
+                logoClicks.current.count = 0;
+                // 震动或控制台视觉反馈（可选）
+              }
+            } else {
+              logoClicks.current.count = 1;
+            }
+            logoClicks.current.lastTime = now;
+            setActiveView('dashboard');
+          }}
         >
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden transition-all duration-300 shadow-sm bg-secondary border border-border-main group-hover:border-accent/30">
-            <img src="/logo.png" className="w-8 h-8 object-contain" alt="Logo" />
+          <div className={cn(
+            "w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden transition-all duration-300 shadow-sm bg-secondary border border-border-main group-hover:border-accent/30",
+            showHiddenPersonas && "shadow-[0_0_15px_rgba(168,85,247,0.4)] border-purple-500/30"
+          )}>
+            <img src="/logo.png" className={cn("w-8 h-8 object-contain", showHiddenPersonas && "hue-rotate-[280deg]")} alt="Logo" />
           </div>
-          <span className="font-bold text-lg tracking-tight group-hover:text-accent transition-colors">Synapse 突触</span>
+          <span className={cn(
+            "font-bold text-lg tracking-tight group-hover:text-accent transition-colors",
+            showHiddenPersonas && "text-purple-500"
+          )}>
+            Synapse {showHiddenPersonas ? '· 隐' : '突触'}
+          </span>
         </div>
 
         <div className="flex-1 px-4 space-y-2 mt-4">
@@ -582,6 +648,8 @@ export default function App() {
               onProcess={handleSaveNote} 
               isProcessing={isProcessing}
               onBackToDashboard={() => setActiveView('dashboard')}
+              showHiddenPersonas={showHiddenPersonas}
+              customPersonas={customPersonas}
               onSaveSession={async (session) => {
                 if (isUsingDevAuthBypass || !user) {
                   setChatSessions(prev => {
@@ -660,6 +728,9 @@ export default function App() {
             <SettingsView
               key="settings"
               onBackToChat={() => setActiveView('chat')}
+              customPersonas={customPersonas}
+              onSavePersona={handleSavePersona}
+              onDeletePersona={handleDeletePersona}
             />
           )}
         </AnimatePresence>

@@ -1,13 +1,16 @@
 export type AIProviderId = 'gemini' | 'openai' | 'minimax' | 'zhipu' | 'moonshot';
-export type AIProviderAuthMode = 'gemini_cli_oauth_or_api_key' | 'api_key';
+export type AIProviderAuthMode = 'gemini_cli_oauth_or_api_key' | 'openai_codex_oauth_or_api_key' | 'api_key';
 export type AIModelLifecycle = 'stable' | 'preview';
+export type AIProviderProtocol = 'gemini_native' | 'openai_compat' | 'anthropic_compat';
 
 export interface AIProviderDefinition {
   id: AIProviderId;
   label: string;
   authMode: AIProviderAuthMode;
+  protocol: AIProviderProtocol;
   apiKeyEnvVar?: string;
   baseUrl?: string;
+  baseUrlEnvVar?: string;
   docsUrl: string;
 }
 
@@ -26,39 +29,48 @@ export const AI_PROVIDERS: Record<AIProviderId, AIProviderDefinition> = {
     id: 'gemini',
     label: 'Google Gemini',
     authMode: 'gemini_cli_oauth_or_api_key',
+    protocol: 'gemini_native',
     apiKeyEnvVar: 'GEMINI_API_KEY',
     docsUrl: 'https://ai.google.dev/gemini-api/docs/models/gemini',
   },
   openai: {
     id: 'openai',
     label: 'OpenAI',
-    authMode: 'api_key',
+    authMode: 'openai_codex_oauth_or_api_key',
+    protocol: 'openai_compat',
     apiKeyEnvVar: 'OPENAI_API_KEY',
     baseUrl: 'https://api.openai.com/v1',
+    baseUrlEnvVar: 'OPENAI_BASE_URL',
     docsUrl: 'https://platform.openai.com/docs/models',
   },
   minimax: {
     id: 'minimax',
     label: 'MiniMax',
     authMode: 'api_key',
+    protocol: 'anthropic_compat',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
-    baseUrl: 'https://api.minimax.io/v1',
+    baseUrl: 'https://api.minimaxi.com/anthropic',
+    baseUrlEnvVar: 'MINIMAX_BASE_URL',
     docsUrl: 'https://platform.minimax.io/docs/guide/Models/Text%20Models',
   },
   zhipu: {
     id: 'zhipu',
     label: 'Zhipu GLM',
     authMode: 'api_key',
+    protocol: 'openai_compat',
     apiKeyEnvVar: 'ZHIPU_API_KEY',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    baseUrlEnvVar: 'ZHIPU_BASE_URL',
     docsUrl: 'https://open.bigmodel.cn/dev/api',
   },
   moonshot: {
     id: 'moonshot',
     label: 'Moonshot Kimi',
     authMode: 'api_key',
+    protocol: 'openai_compat',
     apiKeyEnvVar: 'MOONSHOT_API_KEY',
-    baseUrl: 'https://api.moonshot.cn/v1',
+    baseUrl: 'https://api.kimi.com/coding/',
+    baseUrlEnvVar: 'MOONSHOT_BASE_URL',
     docsUrl: 'https://platform.moonshot.ai/docs',
   },
 };
@@ -119,16 +131,61 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     provider: 'openai',
     model: 'gpt-5.2',
     label: 'GPT-5.2',
-    description: 'OpenAI 当前官方模型页列出的最新 GPT-5 主力模型。',
+    description: 'OpenAI GPT-5 通用模型，支持 Codex OAuth 或 API key。',
     lifecycle: 'stable',
     docsUrl: 'https://platform.openai.com/docs/models',
+  },
+  {
+    id: 'openai/gpt-5.2-codex',
+    provider: 'openai',
+    model: 'gpt-5.2-codex',
+    label: 'GPT-5.2 Codex',
+    description: 'Codex 优化模型，适合代码与 agent 场景，支持 OpenAI Codex OAuth。',
+    lifecycle: 'stable',
+    docsUrl: 'https://github.com/openai/codex',
+  },
+  {
+    id: 'openai/gpt-5.1',
+    provider: 'openai',
+    model: 'gpt-5.1',
+    label: 'GPT-5.1',
+    description: 'OpenAI GPT-5.1 通用模型，支持 Codex OAuth 或 API key。',
+    lifecycle: 'stable',
+    docsUrl: 'https://github.com/openai/codex',
+  },
+  {
+    id: 'openai/gpt-5.1-codex-max',
+    provider: 'openai',
+    model: 'gpt-5.1-codex-max',
+    label: 'GPT-5.1 Codex Max',
+    description: 'Codex Max 档位，适合复杂代码任务，支持 OpenAI Codex OAuth。',
+    lifecycle: 'stable',
+    docsUrl: 'https://github.com/openai/codex',
+  },
+  {
+    id: 'openai/gpt-5.1-codex',
+    provider: 'openai',
+    model: 'gpt-5.1-codex',
+    label: 'GPT-5.1 Codex',
+    description: 'Codex 模型，适合代码审查与多步操作，支持 OpenAI Codex OAuth。',
+    lifecycle: 'stable',
+    docsUrl: 'https://github.com/openai/codex',
+  },
+  {
+    id: 'openai/gpt-5.1-codex-mini',
+    provider: 'openai',
+    model: 'gpt-5.1-codex-mini',
+    label: 'GPT-5.1 Codex Mini',
+    description: 'Codex 轻量版本，支持 OpenAI Codex OAuth。',
+    lifecycle: 'stable',
+    docsUrl: 'https://github.com/openai/codex',
   },
   {
     id: 'openai/gpt-5.2-pro',
     provider: 'openai',
     model: 'gpt-5.2-pro',
     label: 'GPT-5.2 Pro',
-    description: 'OpenAI 更强推理档位，适合高复杂度任务。',
+    description: 'OpenAI 平台 API 档位，当前建议走 API key。',
     lifecycle: 'stable',
     docsUrl: 'https://platform.openai.com/docs/models',
   },
@@ -137,7 +194,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     provider: 'openai',
     model: 'gpt-5-mini',
     label: 'GPT-5 Mini',
-    description: 'OpenAI 轻量 GPT-5 模型，适合低延迟聊天。',
+    description: 'OpenAI 轻量 GPT-5 模型，当前建议走 API key。',
     lifecycle: 'stable',
     docsUrl: 'https://platform.openai.com/docs/models',
   },
@@ -220,7 +277,12 @@ export const MODEL_FALLBACKS: Record<string, string[]> = {
   'gemini/gemini-3.1-pro-preview': ['gemini/gemini-2.5-pro', 'gemini/gemini-2.5-flash-lite'],
   'gemini/gemini-2.5-pro': ['gemini/gemini-2.5-flash-lite'],
   'gemini/gemini-2.5-flash': ['gemini/gemini-2.5-flash-lite'],
-  'openai/gpt-5.2': ['openai/gpt-5-mini'],
+  'openai/gpt-5.2': ['openai/gpt-5.1', 'openai/gpt-5-mini'],
+  'openai/gpt-5.2-codex': ['openai/gpt-5.1-codex', 'openai/gpt-5-mini'],
+  'openai/gpt-5.1': ['openai/gpt-5-mini'],
+  'openai/gpt-5.1-codex-max': ['openai/gpt-5.1-codex', 'openai/gpt-5-mini'],
+  'openai/gpt-5.1-codex': ['openai/gpt-5.1-codex-mini', 'openai/gpt-5-mini'],
+  'openai/gpt-5.1-codex-mini': ['openai/gpt-5-mini'],
   'openai/gpt-5.2-pro': ['openai/gpt-5.2', 'openai/gpt-5-mini'],
   'minimax/MiniMax-M2.5': ['minimax/MiniMax-M2.5-highspeed'],
   'zhipu/glm-5': ['zhipu/glm-4.7'],
@@ -291,6 +353,15 @@ export function getApiModelId(value: string | null | undefined): string {
 export function getProviderForModel(value: string | null | undefined): AIProviderDefinition {
   const parsed = parseModelSelection(value);
   return AI_PROVIDERS[parsed.provider];
+}
+
+export function getResolvedProviderConfig(value: string | null | undefined): AIProviderDefinition {
+  const provider = getProviderForModel(value);
+  const overrideBaseUrl = provider.baseUrlEnvVar ? process.env[provider.baseUrlEnvVar]?.trim() : '';
+  return {
+    ...provider,
+    baseUrl: overrideBaseUrl || provider.baseUrl,
+  };
 }
 
 export function getPreferredTextModel(): string {

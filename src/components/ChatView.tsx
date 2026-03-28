@@ -2,11 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Send, Sparkles, Loader2, BrainCircuit, Image as ImageIcon, X, LayoutDashboard, History, Plus, Trash2, MessageSquare, FileText, FileUp, Link as LinkIcon, ChevronRight, BookOpen, Square, RefreshCw, Pencil, Copy, Check, Edit3 } from 'lucide-react';
-import { ChatMessage, Note, Flashcard, ChatSession } from '../types';
+import { Send, Sparkles, Loader2, BrainCircuit, Image as ImageIcon, X, LayoutDashboard, History, Plus, Trash2, MessageSquare, FileText, FileUp, Link as LinkIcon, ChevronRight, BookOpen, Square, RefreshCw, Pencil, Copy, Check, Edit3, Download, Search, Filter, Gavel, TrendingUp, Sigma, ShieldAlert } from 'lucide-react';
+import { ChatMessage, Note, Flashcard, ChatSession, Persona } from '../types';
+import { PRESET_PERSONAS, DEFAULT_PERSONA_ID, deobfuscate, HIDDEN_PERSONA_PAYLOAD } from '../lib/personas';
 import { chatWithAI, chatWithAIStream, processConversation, BreakthroughConfig, startBreakthroughChat, startBreakthroughChatStream, deconstructDocument, deconstructUrl, deconstructScannedDocument, deconstructTOC, type StreamChunk } from '../services/gemini';
 import { cn } from '../lib/utils';
 import { AI_MODEL_OPTIONS, getModelOption, getPreferredTextModel, isKnownTextModel, setPreferredTextModel } from '../lib/aiModels';
+import ImportDialog from './ImportDialog';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Set up PDF.js worker
@@ -23,6 +25,8 @@ interface ChatViewProps {
   onDeleteSession: (id: string) => Promise<void>;
   breakthroughConfig?: BreakthroughConfig | null;
   onClearBreakthrough?: () => void;
+  showHiddenPersonas?: boolean;
+  customPersonas?: Persona[];
 }
 
 function getUserFacingAiError(error: unknown): string {
@@ -59,7 +63,19 @@ function getUserFacingAiError(error: unknown): string {
   return '抱歉，我遇到了错误。请重试。';
 }
 
-export default function ChatView({ notes, chatSessions, onProcess, isProcessing, onBackToDashboard, onSaveSession, onDeleteSession, breakthroughConfig, onClearBreakthrough }: ChatViewProps) {
+export default function ChatView({ 
+  notes, 
+  chatSessions, 
+  onProcess, 
+  isProcessing, 
+  onBackToDashboard, 
+  onSaveSession, 
+  onDeleteSession, 
+  breakthroughConfig, 
+  onClearBreakthrough,
+  showHiddenPersonas = false,
+  customPersonas = []
+}: ChatViewProps) {
   const [selectedModel, setSelectedModel] = useState(() => getPreferredTextModel());
   const [customModelInput, setCustomModelInput] = useState(() => {
     const currentModel = getPreferredTextModel();
@@ -86,12 +102,56 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
   const [editingMessageIdx, setEditingMessageIdx] = useState<number | null>(null);
   const [editInput, setEditInput] = useState('');
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
+  const [historySourceFilter, setHistorySourceFilter] = useState<'all' | 'native' | 'gemini_import' | 'chatgpt_import' | 'other_import'>('all');
+  const [assetProcessStatus, setAssetProcessStatus] = useState<'idle' | 'analyzing' | 'extracting' | 'connecting' | 'success'>('idle');
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string>(DEFAULT_PERSONA_ID);
   
+  // 获取所有人格列表（预设 + 自定义 + 隐藏）
+  const allAvailablePersonas: Persona[] = [
+    ...PRESET_PERSONAS.filter(p => !p.isHidden),
+    ...customPersonas,
+    ...(showHiddenPersonas ? [{
+      id: 'hidden-shadow',
+      name: '影子分身',
+      icon: 'ShieldAlert',
+      description: '极度坦诚的私人建议。',
+      systemPrompt: deobfuscate(HIDDEN_PERSONA_PAYLOAD),
+      category: 'hidden' as const,
+      isLocked: true,
+      isHidden: true
+    }] : [])
+  ];
+
+  const currentPersona = allAvailablePersonas.find(p => p.id === selectedPersonaId) || allAvailablePersonas[0];
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isCustomModel = !isKnownTextModel(selectedModel);
   const currentModelOption = getModelOption(selectedModel);
+
+  // 搜索 + 来源筛选的对话列表
+  const filteredSessions = chatSessions.filter(session => {
+    // 来源筛选
+    if (historySourceFilter !== 'all') {
+      const src = session.source || 'native';
+      if (historySourceFilter === 'other_import') {
+        if (!src.includes('import') || src === 'gemini_import' || src === 'chatgpt_import') return false;
+      } else if (src !== historySourceFilter) {
+        return false;
+      }
+    }
+    // 关键字搜索（标题 + 首条消息内容）
+    if (historySearch.trim()) {
+      const q = historySearch.toLowerCase();
+      const titleMatch = (session.title || '').toLowerCase().includes(q);
+      const contentMatch = session.messages.some(m => m.text.toLowerCase().includes(q));
+      if (!titleMatch && !contentMatch) return false;
+    }
+    return true;
+  });
+
   const hasExtractableConversation =
     messages.some((message) => message.role === 'user' && message.text.trim()) &&
     messages.some((message, index) => index > 0 && message.role === 'model' && message.text.trim());
@@ -168,16 +228,20 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
   const startNewChat = () => {
     setCurrentSessionId(null);
     setMessages([
-      { role: 'model', text: "你好！我是你的计算机科学导师。今天我们要学习什么？我可以帮你把新概念与你已有的知识连接起来。" }
+      { role: 'model', text: `你好！我是你的${currentPersona.name}。今天我们要学习什么？我可以帮你把新概念与你已有的知识连接起来。` }
     ]);
+    // 保留当前的 persona，而不是重置为默认
     setShowHistory(false);
   };
 
   const loadSession = (session: ChatSession) => {
     setCurrentSessionId(session.id);
     setMessages(session.messages);
+    setSelectedPersonaId(session.personaId || DEFAULT_PERSONA_ID);
     setShowHistory(false);
   };
+
+
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -322,7 +386,12 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
 
       let fullText = '';
       let fullThought = '';
-      const stream = chatWithAIStream(messagesToSend, notes, controller.signal);
+      const stream = chatWithAIStream(
+        messagesToSend,
+        notes,
+        currentPersona,
+        controller.signal
+      );
 
       for await (const chunk of stream) {
         if (chunk.thought) fullThought += chunk.thought;
@@ -348,6 +417,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
         messages: finalMessages,
         updatedAt: Date.now(),
         userId: '',
+        personaId: selectedPersonaId,
       });
     } catch (error: any) {
       if (controller.signal.aborted) return; // 用户主动停止，不显示错误
@@ -399,10 +469,22 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
   const handleProcess = async () => {
     if (!hasExtractableConversation || isProcessBusy) return;
     setIsAssetProcessing(true);
+    setAssetProcessStatus('analyzing');
     try {
       const chatHistory = messages.map(m => `${m.role === 'user' ? '用户' : 'AI'}: ${m.text}`);
+      
+      // Step 1: AI Analysis
+      setAssetProcessStatus('extracting');
       const result = await processConversation(chatHistory);
+      
+      // Step 2: Saving and Linking (handled by App.tsx through onProcess)
+      setAssetProcessStatus('connecting');
       await onProcess(result.note, result.flashcards);
+      
+      // Step 3: Success
+      setAssetProcessStatus('success');
+      // 给用户一点时间看到成功的提示
+      await new Promise(resolve => setTimeout(resolve, 800));
     } catch (error) {
       console.error('提取资产失败:', error);
       setMessages(prev => [...prev, {
@@ -411,6 +493,7 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
       }]);
     } finally {
       setIsAssetProcessing(false);
+      setAssetProcessStatus('idle');
     }
   };
 
@@ -479,23 +562,73 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               </button>
             </div>
             
-            <div className="p-4">
+            <div className="p-4 space-y-2">
               <button 
                 onClick={startNewChat}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-tertiary border border-border-main rounded-xl text-sm font-bold hover:bg-secondary transition-all mb-4 text-text-main shadow-sm"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-tertiary border border-border-main rounded-xl text-sm font-bold hover:bg-secondary transition-all text-text-main shadow-sm"
               >
                 <Plus size={18} />
                 开启新对话
               </button>
+              <button 
+                onClick={() => { setShowHistory(false); setShowImportDialog(true); }}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-accent/10 border border-accent/20 rounded-xl text-sm font-bold hover:bg-accent/20 transition-all text-accent shadow-sm"
+              >
+                <Download size={18} />
+                导入 Gemini 对话
+              </button>
+            </div>
+
+            {/* 搜索与筛选 */}
+            <div className="px-4 pb-3 space-y-2">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="text"
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  placeholder="搜索对话..."
+                  className="w-full pl-9 pr-8 py-2 rounded-xl bg-tertiary border border-border-main text-sm text-text-main placeholder:text-text-muted/40 outline-none focus:border-accent/40 transition-colors"
+                />
+                {historySearch && (
+                  <button
+                    onClick={() => setHistorySearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[
+                  { key: 'all' as const, label: '全部' },
+                  { key: 'native' as const, label: '原生' },
+                  { key: 'gemini_import' as const, label: 'Gemini' },
+                  { key: 'chatgpt_import' as const, label: 'ChatGPT' },
+                ].map(f => (
+                  <button
+                    key={f.key}
+                    onClick={() => setHistorySourceFilter(f.key)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all",
+                      historySourceFilter === f.key
+                        ? "bg-accent/20 text-accent"
+                        : "bg-tertiary text-text-muted hover:text-text-main"
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 space-y-2 pb-6">
-              {chatSessions.length === 0 ? (
-                <div className="text-center py-12 text-white/20 text-xs font-bold uppercase tracking-widest">
-                  暂无历史记录
+              {filteredSessions.length === 0 ? (
+                <div className="text-center py-12 text-text-muted/30 text-xs font-bold uppercase tracking-widest">
+                  {historySearch || historySourceFilter !== 'all' ? '没有匹配的对话' : '暂无历史记录'}
                 </div>
               ) : (
-                chatSessions.map(session => (
+                filteredSessions.map(session => (
                   <div 
                     key={session.id}
                     className={cn(
@@ -525,7 +658,20 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
                         />
                       ) : (
                         <>
-                          <p className="text-sm font-medium truncate">{session.title || '无标题会话'}</p>
+                          <p className="text-sm font-medium truncate flex items-center gap-1.5">
+                            {session.title || '无标题会话'}
+                            {session.source && session.source !== 'native' && (
+                              <span className={cn(
+                                "inline-block px-1.5 py-0 rounded text-[8px] font-black uppercase tracking-wider",
+                                session.source === 'gemini_import' ? "bg-blue-500/10 text-blue-500" :
+                                session.source === 'chatgpt_import' ? "bg-green-500/10 text-green-500" :
+                                "bg-purple-500/10 text-purple-500"
+                              )}>
+                                {session.source === 'gemini_import' ? 'Gemini' :
+                                 session.source === 'chatgpt_import' ? 'GPT' : '导入'}
+                              </span>
+                            )}
+                          </p>
                           <p className="text-[10px] text-text-muted uppercase font-bold">{new Date(session.updatedAt).toLocaleDateString()}</p>
                         </>
                       )}
@@ -580,9 +726,19 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
             >
               <History size={20} />
             </button>
-            <div>
-              <h2 className="text-xl font-bold tracking-tight">学习会话</h2>
-              <p className="text-sm text-text-muted">通过对话构建你的知识资产。</p>
+            <div className="flex items-center gap-3 select-none">
+              <div className={cn(
+                "w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden transition-all duration-300 bg-secondary border border-border-main group-hover:border-accent/30 shadow-sm",
+                showHiddenPersonas && "ring-2 ring-purple-500/50 border-purple-500/30"
+              )}>
+                <img src="/logo.png" className={cn("w-8 h-8 object-contain", showHiddenPersonas && "hue-rotate-[280deg]")} alt="Logo" />
+              </div>
+              <div className="flex flex-col">
+                <h2 className="text-xl font-bold tracking-tight">
+                  {currentPersona.name} {showHiddenPersonas && <span className="text-purple-500 text-xs ml-1 opacity-60">· 隐</span>}
+                </h2>
+                <p className="text-[10px] text-text-muted font-bold opacity-60 uppercase tracking-widest leading-none">OpenSynapse AI 导师系统</p>
+              </div>
             </div>
           </div>
           <div className="flex flex-col items-stretch gap-3 md:items-end">
@@ -671,32 +827,74 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
               className="absolute inset-0 z-20 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-12 text-center"
             >
               <div className="relative w-32 h-32 mb-8">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-                  className="absolute inset-0 border-2 border-dashed border-orange-500/30 rounded-full"
-                />
-                <motion.div
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  className="absolute inset-4 bg-orange-500/10 rounded-full flex items-center justify-center"
-                >
-                  <BrainCircuit className="w-12 h-12 text-orange-500" />
-                </motion.div>
-                <motion.div
-                  animate={{ y: [-60, 60, -60] }}
-                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute left-0 right-0 h-0.5 bg-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.8)]"
-                />
+                {assetProcessStatus === 'success' ? (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="absolute inset-0 bg-green-500 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(34,197,94,0.5)]"
+                  >
+                    <Check className="w-16 h-16 text-white" strokeWidth={3} />
+                  </motion.div>
+                ) : (
+                  <>
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                      className={cn(
+                        "absolute inset-0 border-2 border-dashed rounded-full",
+                        isDeconstructing ? "border-blue-500/30" : "border-orange-500/30"
+                      )}
+                    />
+                    <motion.div
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                      className={cn(
+                        "absolute inset-4 rounded-full flex items-center justify-center",
+                        isDeconstructing ? "bg-blue-500/10" : "bg-orange-500/10"
+                      )}
+                    >
+                      {isDeconstructing ? (
+                        <Sparkles className="w-12 h-12 text-blue-500" />
+                      ) : (
+                        <BrainCircuit className="w-12 h-12 text-orange-500" />
+                      )}
+                    </motion.div>
+                    <motion.div
+                      animate={{ y: [-60, 60, -60] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                      className={cn(
+                        "absolute left-0 right-0 h-0.5 shadow-[0_0_15px_rgba(249,115,22,0.8)]",
+                        isDeconstructing ? "bg-blue-500" : "bg-orange-500"
+                      )}
+                    />
+                  </>
+                )}
               </div>
-              <h3 className="text-xl font-bold mb-2">
-                {isDeconstructing ? "正在深度解构文档..." : "正在提取知识资产..."}
-              </h3>
-              <p className="text-white/40 text-sm max-w-xs">
-                {isDeconstructing 
-                  ? "AI 正在扫描文档中的底层逻辑，并将其转化为结构化笔记与闪卡。" 
-                  : "AI 正在扫描对话中的底层逻辑，并将其“结晶”为笔记与闪卡。"}
-              </p>
+              <div className="flex flex-col items-center gap-3">
+                <h3 className={cn(
+                  "text-2xl font-black tracking-tighter uppercase",
+                  assetProcessStatus === 'success' ? "text-green-500" : 
+                  isDeconstructing ? "text-blue-500" : "text-orange-500"
+                )}>
+                  {assetProcessStatus === 'success' ? "提取成功" : 
+                   isDeconstructing ? "正在解构资产" : "正在提取知识"}
+                </h3>
+                <div className="flex flex-col items-center gap-1">
+                  <p className="text-text-muted text-sm font-bold uppercase tracking-widest opacity-60">
+                    {assetProcessStatus === 'analyzing' && "正在分析对话内容..."}
+                    {assetProcessStatus === 'extracting' && "AI 正在提取核心知识点..."}
+                    {assetProcessStatus === 'connecting' && "正在建立语义连接并保存..."}
+                    {assetProcessStatus === 'success' && "正在跳转至笔记视图..."}
+                    {(!assetProcessStatus || assetProcessStatus === 'idle') && "请稍候..."}
+                  </p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Loader2 size={12} className="animate-spin text-text-muted/40" />
+                    <span className="text-[10px] text-text-muted/40 font-bold uppercase tracking-widest">
+                      加密同步中 • NEURAL SYNC
+                    </span>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -918,160 +1116,233 @@ export default function ChatView({ notes, chatSessions, onProcess, isProcessing,
         )}
       </AnimatePresence>
 
-      {/* Input */}
-      <div className="p-6 bg-gradient-to-t from-primary to-transparent">
-        <AnimatePresence>
-          {showUrlInput && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="mb-4 flex gap-2"
-            >
-              <input
-                type="url"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="输入文章或网页 URL..."
-                className="flex-1 bg-secondary border border-border-main rounded-xl px-4 py-2 text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:border-accent/50 shadow-sm"
-              />
-              <button
-                onClick={handleUrlImport}
-                disabled={!urlInput.trim() || isDeconstructing}
-                className="px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 disabled:opacity-50"
+      {/* Input Section */}
+      <div className="p-4 bg-primary/80 backdrop-blur-md border-t border-border-main pb-8">
+        <div className="max-w-4xl mx-auto flex flex-col gap-3">
+          
+          <AnimatePresence>
+            {showUrlInput && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="mb-2 flex gap-2 p-2 bg-secondary/50 rounded-xl border border-border-main"
               >
-                导入并解构
-              </button>
-              <button
-                onClick={() => setShowUrlInput(false)}
-                className="p-2 hover:bg-white/5 rounded-xl"
-              >
-                <X size={18} />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div className="flex gap-4 mb-4">
-          {selectedImage && (
-            <div className="relative inline-block">
-              <img src={selectedImage} alt="Preview" className="w-24 h-24 object-cover rounded-xl border border-white/20" referrerPolicy="no-referrer" />
-              <button 
-                onClick={() => setSelectedImage(null)}
-                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          )}
-          {selectedFile && (
-            <div className="relative flex items-center gap-3 p-3 bg-white/5 border border-white/10 rounded-xl min-w-[200px]">
-              <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-500">
-                <FileText size={20} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold truncate">{selectedFile.name}</p>
-                <p className="text-[10px] text-white/40 uppercase">{(selectedFile.size / 1024).toFixed(1)} KB</p>
-              </div>
-              <div className="flex items-center gap-1">
-                <button 
-                  onClick={() => handleDeconstruct()}
-                  className="p-1.5 hover:bg-orange-500/20 text-orange-500 rounded-lg transition-all"
-                  title="解构文档"
+                <input
+                  type="url"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  placeholder="输入文章或网页 URL..."
+                  className="flex-1 bg-transparent border-none px-2 py-1 text-sm text-text-main placeholder:text-text-muted focus:outline-none"
+                />
+                <button
+                  onClick={handleUrlImport}
+                  disabled={!urlInput.trim() || isDeconstructing}
+                  className="px-3 py-1 bg-accent text-white rounded-lg text-xs font-bold hover:bg-accent-hover disabled:opacity-50 transition-colors"
                 >
-                  <Sparkles size={16} />
+                  {isDeconstructing ? '处理中...' : '开始解构'}
                 </button>
-                <button 
-                  onClick={() => setSelectedFile(null)}
-                  className="p-1.5 hover:bg-red-500/20 text-red-500 rounded-lg transition-all"
+                <button
+                  onClick={() => setShowUrlInput(false)}
+                  className="p-1 hover:bg-tertiary rounded-lg text-text-muted"
                 >
                   <X size={16} />
                 </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Attachments Preview */}
+          <div className="flex gap-4">
+            {selectedImage && (
+              <div className="relative inline-block">
+                <img src={selectedImage} alt="Preview" className="w-20 h-20 object-cover rounded-xl border border-border-main shadow-md" />
+                <button 
+                  onClick={() => setSelectedImage(null)}
+                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+            {selectedFile && (
+              <div className="relative flex items-center gap-3 p-3 bg-secondary/50 border border-border-main rounded-xl min-w-[200px]">
+                <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent">
+                  <FileText size={20} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold truncate">{selectedFile.name}</p>
+                  <p className="text-[10px] text-text-muted uppercase">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => handleDeconstruct()}
+                    className="p-1.5 hover:bg-accent/20 text-accent rounded-lg transition-all"
+                    title="解构文档"
+                  >
+                    <Sparkles size={16} />
+                  </button>
+                  <button 
+                    onClick={() => setSelectedFile(null)}
+                    className="p-1.5 hover:bg-red-500/20 text-red-500 rounded-lg transition-all"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Persona Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none px-1">
+            {allAvailablePersonas.map((p) => {
+              const Icon = ({
+                BrainCircuit, Sigma, Gavel, TrendingUp, Sparkles, ShieldAlert
+              } as any)[p.icon] || MessageSquare;
+              
+              const isActive = selectedPersonaId === p.id;
+              
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    setSelectedPersonaId(p.id);
+                    if (messages.length <= 1 && messages[0]?.role === 'model') {
+                      setMessages([{ 
+                        role: 'model', 
+                        text: `你好！我是你的${p.name}。今天我们要学习什么？我可以帮你把新概念与你已有的知识连接起来。` 
+                      }]);
+                    }
+                  }}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-full transition-all text-xs font-bold whitespace-nowrap border shrink-0",
+                    isActive 
+                      ? "bg-accent text-white border-accent shadow-lg shadow-accent/20" 
+                      : "bg-tertiary text-text-muted border-border-main hover:border-accent/50 hover:text-text-main"
+                  )}
+                >
+                  <Icon size={14} className={cn(isActive ? "text-white" : "text-accent")} />
+                  {p.name}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Input Box */}
+          <div className="relative group/input">
+            <div className="absolute -inset-1 bg-gradient-to-r from-accent/20 to-purple-500/20 rounded-3xl blur opacity-0 group-focus-within/input:opacity-100 transition duration-500"></div>
+            <div className="relative flex flex-col gap-2 p-3 bg-secondary border border-border-main rounded-2xl min-h-[60px] group-focus-within/input:border-accent/40 group-focus-within/input:ring-1 group-focus-within/input:ring-accent/40 transition-all duration-300">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder={currentPersona.id === 'hidden-shadow' ? "指示你的分身..." : `以${currentPersona.name}的身份交流...`}
+                className="w-full bg-transparent border-none p-2 text-sm text-text-main placeholder:text-text-muted focus:outline-none resize-none min-h-[40px]"
+              />
+              
+              <div className="flex items-center justify-between mt-1">
+                <div className="flex items-center gap-1">
+                  <input type="file" ref={fileInputRef} onChange={handleImageSelect} accept="image/*" className="hidden" />
+                  <input type="file" ref={docInputRef} onChange={handleFileSelect} accept=".pdf,.txt,.md" className="hidden" />
+                  
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-main hover:bg-tertiary transition-all"
+                    title="上传图片"
+                  >
+                    <ImageIcon size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => docInputRef.current?.click()}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-main hover:bg-tertiary transition-all"
+                    title="上传文档"
+                  >
+                    <FileUp size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowUrlInput(!showUrlInput)}
+                    className={cn(
+                      "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
+                      showUrlInput ? "text-accent bg-accent/10" : "text-text-muted hover:text-text-main hover:bg-tertiary"
+                    )}
+                    title="从 URL 导入"
+                  >
+                    <LinkIcon size={18} />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {isLoading ? (
+                    <button
+                      type="button"
+                      onClick={handleStop}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+                      title="停止生成"
+                    >
+                      <Square size={14} fill="currentColor" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSend}
+                      disabled={!input.trim() && !selectedImage}
+                      className={cn(
+                        "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
+                        !input.trim() && !selectedImage
+                          ? "text-text-muted opacity-30"
+                          : "bg-accent text-white hover:bg-accent-hover shadow-lg shadow-accent/20"
+                      )}
+                    >
+                      <Send size={16} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          )}
-        </div>
-        <div className="relative group">
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleImageSelect} 
-            accept="image/*" 
-            className="hidden" 
-          />
-          <input 
-            type="file" 
-            ref={docInputRef} 
-            onChange={handleFileSelect} 
-            accept=".pdf,.txt,.md" 
-            className="hidden" 
-          />
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-main hover:bg-tertiary transition-all"
-              title="上传图片"
-            >
-              <ImageIcon size={18} />
-            </button>
-            <button
-              onClick={() => docInputRef.current?.click()}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-main hover:bg-tertiary transition-all"
-              title="上传文档 (PDF/Text)"
-            >
-              <FileUp size={18} />
-            </button>
-            <button
-              onClick={() => setShowUrlInput(!showUrlInput)}
-              className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
-                showUrlInput ? "text-accent bg-accent/10" : "text-text-muted hover:text-text-main hover:bg-tertiary"
-              )}
-              title="从 URL 导入"
-            >
-              <LinkIcon size={18} />
-            </button>
           </div>
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
+          <p className="text-[10px] text-center mt-2 text-text-muted opacity-50 uppercase tracking-widest font-medium">
+            按 Enter 发送 • Shift+Enter 换行
+          </p>
+        </div>
+      </div>
+
+      {/* 导入对话弹窗 */}
+      <AnimatePresence>
+        {showImportDialog && (
+          <ImportDialog
+            open={showImportDialog}
+            onClose={() => setShowImportDialog(false)}
+            existingSessions={chatSessions}
+            userId={chatSessions[0]?.userId || 'local'}
+            onImportSessions={async (sessions) => {
+              for (const session of sessions) {
+                await onSaveSession(session);
               }
             }}
-            placeholder="询问概念、算法或代码..."
-            className="w-full bg-secondary border border-border-main rounded-2xl pl-40 pr-16 py-4 text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:border-accent/50 transition-all resize-none h-16 group-hover:border-border-accent/30 shadow-sm"
+            onImportAndExtract={async (sessions) => {
+              for (const session of sessions) {
+                await onSaveSession(session);
+                const history = session.messages.map(m => m.text);
+                try {
+                  const result = await processConversation(history);
+                  await onProcess(result.note, result.flashcards);
+                } catch (e) {
+                  console.error(`[Import] 知识提炼失败 (${session.title}):`, e);
+                }
+              }
+            }}
           />
-          {isLoading ? (
-            <button
-              onClick={handleStop}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all"
-              title="停止生成"
-            >
-              <Square size={18} />
-            </button>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() && !selectedImage}
-              className={cn(
-                "absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl flex items-center justify-center transition-all",
-                !input.trim() && !selectedImage
-                  ? "text-text-muted opacity-30"
-                  : "bg-accent text-white hover:bg-accent-hover shadow-lg shadow-accent/20"
-              )}
-            >
-              <Send size={18} />
-            </button>
-          )}
-        </div>
-        <p className="text-[10px] text-center mt-3 text-text-muted opacity-50 uppercase tracking-widest font-medium">
-          按 Enter 发送 • Shift+Enter 换行
-        </p>
-      </div>
+        )}
+      </AnimatePresence>
     </div>
   </div>
-);
+  );
 }

@@ -1,6 +1,7 @@
 import { Type } from "@google/genai";
-import { Note, Flashcard, ChatMessage } from "../types";
+import { Note, Flashcard, ChatMessage, Persona } from "../types";
 import { DEFAULT_STRUCTURED_MODEL, EMBEDDING_MODEL, getPreferredTextModel } from "../lib/aiModels";
+import { PRESET_PERSONAS, DEFAULT_PERSONA_ID } from "../lib/personas";
 
 // ─── 流式 chunk 类型定义 ───
 
@@ -124,7 +125,7 @@ function buildContentParts(messages: ChatMessage[]) {
 
 // ─── 非流式聊天（保留用于兼容和 JSON 输出场景） ───
 
-export async function chatWithAI(messages: ChatMessage[], allNotes: Note[]) {
+export async function chatWithAI(messages: ChatMessage[], allNotes: Note[], persona?: Persona) {
   const modelId = getPreferredTextModel();
   const useRAG = shouldUseRAG(messages, allNotes);
 
@@ -139,7 +140,12 @@ export async function chatWithAI(messages: ChatMessage[], allNotes: Note[]) {
 
   const recentMessages = messages.slice(-12);
   const contents = buildContentParts(recentMessages);
-  const systemInstruction = useRAG ? getSystemInstruction(contextText) : getSystemInstructionLight();
+  
+  // 使用选定的人格，默认为计算机导师
+  const activePersona = persona || PRESET_PERSONAS.find(p => p.id === DEFAULT_PERSONA_ID)!;
+  const systemInstruction = useRAG 
+    ? getSystemInstruction(contextText, activePersona) 
+    : getSystemInstructionLight(activePersona);
 
   const response = await ai.models.generateContent({
     model: modelId,
@@ -154,6 +160,7 @@ export async function chatWithAI(messages: ChatMessage[], allNotes: Note[]) {
 export async function* chatWithAIStream(
   messages: ChatMessage[],
   allNotes: Note[],
+  persona?: Persona,
   abortSignal?: AbortSignal
 ): AsyncGenerator<StreamChunk> {
   const modelId = getPreferredTextModel();
@@ -171,7 +178,12 @@ export async function* chatWithAIStream(
   // 历史裁剪：只保留最近 12 条消息，避免上下文过长导致超时
   const recentMessages = messages.slice(-12);
   const contents = buildContentParts(recentMessages);
-  const systemInstruction = useRAG ? getSystemInstruction(contextText) : getSystemInstructionLight();
+  
+  // 使用选定的人格，默认为计算机导师
+  const activePersona = persona || PRESET_PERSONAS.find(p => p.id === DEFAULT_PERSONA_ID)!;
+  const systemInstruction = useRAG 
+    ? getSystemInstruction(contextText, activePersona) 
+    : getSystemInstructionLight(activePersona);
 
   const stream = ai.models.generateContentStream({
     model: modelId,
@@ -191,33 +203,17 @@ export async function* chatWithAIStream(
 // ─── 系统提示词 ───
 
 /** 轻量系统提示：短消息和日常闲聊使用，响应更快 */
-function getSystemInstructionLight(): string {
-  return `你是一位计算机科学导师。用中文回答，风格通俗、幽默、逻辑严密。代码默认使用 C++。`;
+function getSystemInstructionLight(persona: Persona): string {
+  return `${persona.systemPrompt}\n\n注意：用中文回答，保持你的角色风格。`;
 }
 
 /** 完整系统提示：涉及知识检索的增强模式使用 */
-function getSystemInstruction(contextText: string): string {
-  return `# Role Definition
-你是一位拥有深厚工程背景的**计算机科学与底层原理导师**，同时具备心理学和教育学视野。你的教学对象是一位具有高认知能力的成年学习者。
-
-# Core Philosophy: "Genetic Epistemology" (发生认识论)
-你的核心教学理念是：**知识不是凭空产生的，而是为了解决特定历史时期的特定"痛点"而发明的。**
-
-# Instruction Protocol (The "Pain-Point" Framework)
-对于用户的每一个疑问，你必须严格遵循以下**"三部曲"**进行拆解：
-
-1.  **【史前时代】(The Context):** 还原该技术诞生之前的"原始状态"和工程师们面临的痛点。
-2.  **【笨办法】(The Naive Approach):** 模拟人类直觉最简方案，推演为什么行不通。
-3.  **【救世主登场】(The Solution):** 自然引出该知识点，强调**权衡（Trade-off）**。
-
-# Domain Specific Constraints
-* **语言：** 使用中文，风格通俗、幽默、逻辑严密。
-* **排版：** 仅对核心概念使用加粗，优先使用列表，代码块指定语言。
-* **编程语言：** 默认 C++。
+function getSystemInstruction(contextText: string, persona: Persona): string {
+  return `${persona.systemPrompt}
 
 # Context Injection
 ${contextText}
-如果用户学到了相关的概念，请提及它们以建立"语义链接"。`;
+如果用户学到了相关的概念，请提及它们以建立"语义链接"。用中文回答，保持你的角色风格。`;
 }
 
 // ─── RAG 检索 ───
