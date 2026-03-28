@@ -80,7 +80,7 @@ router.post("/notes", requireAuth(async (req, res, userId) => {
       source,
       userId,
       createdAt: toDbDate(createdAt),
-      updatedAt: updatedAt ? toDbDate(updatedAt) : new Date(),
+      updatedAt: updatedAt !== undefined ? toDbDate(updatedAt) : new Date(),
     });
     res.json(mapNoteToFrontend(note));
   } catch (error) {
