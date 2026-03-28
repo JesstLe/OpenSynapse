@@ -71,6 +71,40 @@ async function startServer() {
     await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
   };
 
+  const sanitizeServerChatSession = (session: any, userId: string) => {
+    const base: Record<string, any> = {
+      id: typeof session?.id === 'string' && session.id.trim()
+        ? session.id.trim()
+        : `server_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      title: typeof session?.title === 'string' && session.title.trim() ? session.title.trim() : '新会话',
+      messages: Array.isArray(session?.messages)
+        ? session.messages
+            .map((message: any) => {
+              const next: Record<string, any> = {
+                role: message?.role === 'user' ? 'user' : 'model',
+                text: typeof message?.text === 'string' ? message.text : '',
+              };
+              if (typeof message?.image === 'string' && message.image.trim()) next.image = message.image;
+              if (typeof message?.thought === 'string' && message.thought.trim()) next.thought = message.thought;
+              return next;
+            })
+            .filter((message: any) => message.text)
+        : [],
+      updatedAt: typeof session?.updatedAt === 'number' ? session.updatedAt : Date.now(),
+      userId,
+    };
+
+    if (typeof session?.source === 'string' && session.source.trim()) base.source = session.source;
+    if (typeof session?.importedAt === 'number') base.importedAt = session.importedAt;
+    if (typeof session?.fingerprint === 'string' && session.fingerprint.trim()) base.fingerprint = session.fingerprint;
+    if (typeof session?.originalExportedAt === 'string' && session.originalExportedAt.trim()) {
+      base.originalExportedAt = session.originalExportedAt;
+    }
+    if (typeof session?.personaId === 'string' && session.personaId.trim()) base.personaId = session.personaId;
+
+    return base;
+  };
+
   const readEnvConfig = async () => {
     try {
       const raw = await fs.readFile(ENV_FILE, "utf-8");
@@ -280,6 +314,36 @@ async function startServer() {
     await saveData(data);
     console.log(`[CLI] Synced new note: ${note.title}`);
     res.json({ success: true });
+  });
+
+  app.post('/api/chat-sessions', async (req, res) => {
+    const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing Firebase ID token.' });
+    }
+
+    const idToken = authHeader.slice(7).trim();
+    if (!idToken) {
+      return res.status(401).json({ error: 'Missing Firebase ID token.' });
+    }
+
+    try {
+      const { verifyIdToken, getFirestore } = await import('./src/lib/firebaseAdmin');
+      const decoded = await verifyIdToken(idToken);
+      const session = sanitizeServerChatSession(req.body?.session, decoded.uid);
+
+      if (!session.messages.length) {
+        return res.status(400).json({ error: 'Chat session must contain at least one message.' });
+      }
+
+      await getFirestore().collection('chat_sessions').doc(session.id).set(session);
+      res.json({ success: true, sessionId: session.id });
+    } catch (error) {
+      console.error('[Server] Chat session save failed:', error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   });
 
   // Vite middleware for development

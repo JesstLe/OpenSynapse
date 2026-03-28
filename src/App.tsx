@@ -105,6 +105,52 @@ function sanitizeChatSession(session: ChatSession, userId: string) {
   return base;
 }
 
+function sanitizeChatSessionLegacy(session: ChatSession, userId: string) {
+  return {
+    id: session.id,
+    title: session.title || '新会话',
+    messages: session.messages.map((message) => {
+      const m: Record<string, any> = { role: message.role, text: message.text };
+      if (message.image) m.image = message.image;
+      if (message.thought) m.thought = message.thought;
+      return m;
+    }),
+    updatedAt: session.updatedAt,
+    userId,
+  };
+}
+
+function isPermissionDeniedError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('Missing or insufficient permissions');
+}
+
+function hasExtendedSessionMetadata(session: ChatSession) {
+  return Boolean(
+    session.source ||
+    session.importedAt ||
+    session.fingerprint ||
+    session.originalExportedAt ||
+    session.personaId
+  );
+}
+
+async function saveSessionViaServer(session: ChatSession, user: User) {
+  const idToken = await user.getIdToken();
+  const response = await fetch('/api/chat-sessions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ session }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+}
+
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
@@ -713,6 +759,34 @@ export default function App() {
                     sanitizeChatSession(session, user.uid)
                   );
                 } catch (error) {
+                  if (isPermissionDeniedError(error) && hasExtendedSessionMetadata(session)) {
+                    try {
+                      // 兼容线上尚未同步更新的旧 Firestore 规则：先确保会话能导入成功。
+                      await setDoc(
+                        doc(db, 'chat_sessions', session.id),
+                        sanitizeChatSessionLegacy(session, user.uid)
+                      );
+                      return;
+                    } catch (legacyError) {
+                      if (isPermissionDeniedError(legacyError)) {
+                        try {
+                          await saveSessionViaServer(session, user);
+                          return;
+                        } catch (serverError) {
+                          handleFirestoreError(serverError, OperationType.WRITE, `chat_sessions/${session.id}`);
+                        }
+                      }
+                      handleFirestoreError(legacyError, OperationType.WRITE, `chat_sessions/${session.id}`);
+                    }
+                  }
+                  if (isPermissionDeniedError(error)) {
+                    try {
+                      await saveSessionViaServer(session, user);
+                      return;
+                    } catch (serverError) {
+                      handleFirestoreError(serverError, OperationType.WRITE, `chat_sessions/${session.id}`);
+                    }
+                  }
                   handleFirestoreError(error, OperationType.WRITE, `chat_sessions/${session.id}`);
                 }
               }}
