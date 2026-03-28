@@ -165,6 +165,21 @@ slash command 的优势是：
 
 **上下文抽离器（context extractor）**
 
+这里真正把两个会话链接起来的，不是模型“记住了什么”，而是工作区上的状态文件：
+
+- `./.ai/valves/dissipative-valve-latest.md`
+- `./.ai/valves/dissipative-valve-handoff.md`
+
+也就是说：
+
+1. 在旧会话中执行 `/dissipative-valve`
+2. 命令必须把可信状态写入 handoff 文件
+3. 用户关闭旧会话
+4. 在新会话中执行 `/dissipative-valve-continue`
+5. 新会话只读取 handoff 文件继续
+
+如果 handoff 文件没有产生，那么说明只执行了“软协议”，还没有形成真正的跨会话连续性。
+
 ---
 
 ## 6. 什么叫“有意义节点”

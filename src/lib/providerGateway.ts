@@ -227,6 +227,46 @@ function buildOpenAICodexBody(params: GatewayParams): Record<string, unknown> {
   return body;
 }
 
+// 将 Google GenAI Type 枚举转换为标准 JSON Schema 类型
+// Google GenAI 使用 Type.OBJECT, Type.STRING 等枚举，而 OpenAI 兼容 API 需要 "object", "string" 等字符串
+function convertGoogleGenAISchemaToStandard(schema: unknown): unknown {
+  if (schema === null || typeof schema !== 'object') {
+    return schema;
+  }
+
+  if (Array.isArray(schema)) {
+    return schema.map(item => convertGoogleGenAISchemaToStandard(item));
+  }
+
+  const result: Record<string, unknown> = {};
+  const typedSchema = schema as Record<string, unknown>;
+
+  for (const [key, value] of Object.entries(typedSchema)) {
+    if (key === 'type' && typeof value === 'number') {
+      // Google GenAI Type 枚举值转换为标准 JSON Schema 类型字符串
+      // Type.OBJECT = 1, Type.STRING = 2, Type.ARRAY = 3, etc.
+      const typeMapping: Record<number, string> = {
+        1: 'object',
+        2: 'string',
+        3: 'array',
+        4: 'number',
+        5: 'integer',
+        6: 'boolean',
+        7: 'null',
+      };
+      result[key] = typeMapping[value] ?? 'string';
+    } else if (key === 'items' || key === 'properties' || key === 'additionalProperties') {
+      result[key] = convertGoogleGenAISchemaToStandard(value);
+    } else if (key === 'required' && Array.isArray(value)) {
+      result[key] = value;
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
 function buildChatCompletionsBody(params: GatewayParams) {
   const body: Record<string, unknown> = {
     model: getApiModelId(params.model),
@@ -241,11 +281,13 @@ function buildChatCompletionsBody(params: GatewayParams) {
 
   if (config.responseMimeType === 'application/json') {
     if (config.responseSchema && typeof config.responseSchema === 'object') {
+      // 转换 Google GenAI Type 枚举为标准 JSON Schema
+      const standardSchema = convertGoogleGenAISchemaToStandard(config.responseSchema);
       body.response_format = {
         type: 'json_schema',
         json_schema: {
           name: 'opensynapse_structured_output',
-          schema: config.responseSchema,
+          schema: standardSchema,
           strict: true,
         },
       };

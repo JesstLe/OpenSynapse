@@ -6,7 +6,9 @@
 import { getFirestore } from './firebaseAdmin';
 import type { UserProfile, ConnectedAccount, AccountSecret } from '../types/auth';
 
-const db = getFirestore();
+function getDb() {
+  return getFirestore();
+}
 
 /**
  * 创建或更新用户档案
@@ -15,7 +17,7 @@ export async function createOrUpdateUserProfile(
   uid: string,
   data: Partial<UserProfile>
 ): Promise<UserProfile> {
-  const userRef = db.collection('users').doc(uid);
+  const userRef = getDb().collection('users').doc(uid);
   const now = Date.now();
   
   const existing = await userRef.get();
@@ -44,7 +46,7 @@ export async function createOrUpdateUserProfile(
  * 获取用户档案
  */
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
-  const userDoc = await db.collection('users').doc(uid).get();
+  const userDoc = await getDb().collection('users').doc(uid).get();
   return userDoc.exists ? (userDoc.data() as UserProfile) : null;
 }
 
@@ -52,7 +54,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
  * 更新最后登录时间
  */
 export async function updateLastLogin(uid: string): Promise<void> {
-  await db.collection('users').doc(uid).update({
+  await getDb().collection('users').doc(uid).update({
     lastLoginAt: Date.now()
   });
 }
@@ -63,7 +65,7 @@ export async function updateLastLogin(uid: string): Promise<void> {
 export async function createOrUpdateConnectedAccount(
   data: Omit<ConnectedAccount, 'linkedAt' | 'lastLoginAt'>
 ): Promise<ConnectedAccount> {
-  const accountRef = db.collection('connected_accounts').doc(data.id);
+  const accountRef = getDb().collection('connected_accounts').doc(data.id);
   const now = Date.now();
   
   const accountData: ConnectedAccount = {
@@ -86,7 +88,7 @@ export async function findConnectedAccount(
   providerUserId: string
 ): Promise<ConnectedAccount | null> {
   const accountId = `${provider}_${providerUserId}`;
-  const accountDoc = await db.collection('connected_accounts').doc(accountId).get();
+  const accountDoc = await getDb().collection('connected_accounts').doc(accountId).get();
   return accountDoc.exists ? (accountDoc.data() as ConnectedAccount) : null;
 }
 
@@ -96,7 +98,7 @@ export async function findConnectedAccount(
 export async function getUserConnectedAccounts(
   firebaseUid: string
 ): Promise<ConnectedAccount[]> {
-  const snapshot = await db
+  const snapshot = await getDb()
     .collection('connected_accounts')
     .where('firebaseUid', '==', firebaseUid)
     .where('status', '==', 'active')
@@ -114,7 +116,7 @@ export async function unlinkConnectedAccount(
   providerUserId: string
 ): Promise<void> {
   const accountId = `${provider}_${providerUserId}`;
-  const accountRef = db.collection('connected_accounts').doc(accountId);
+  const accountRef = getDb().collection('connected_accounts').doc(accountId);
   
   const account = await accountRef.get();
   if (!account.exists || account.data()?.firebaseUid !== firebaseUid) {
@@ -130,7 +132,7 @@ export async function unlinkConnectedAccount(
   await accountRef.update({ status: 'revoked' });
   
   // 更新用户档案中的登录方式列表
-  const userRef = db.collection('users').doc(firebaseUid);
+  const userRef = getDb().collection('users').doc(firebaseUid);
   const userData = await userRef.get();
   if (userData.exists) {
     const providers = userData.data()?.loginProviders || [];
@@ -144,7 +146,7 @@ export async function unlinkConnectedAccount(
  * 获取用户的 API Key 配置
  */
 export async function getAccountSecrets(uid: string): Promise<Partial<AccountSecret> | null> {
-  const secretDoc = await db.collection('account_secrets').doc(uid).get();
+  const secretDoc = await getDb().collection('account_secrets').doc(uid).get();
   return secretDoc.exists ? (secretDoc.data() as AccountSecret) : null;
 }
 
@@ -155,7 +157,7 @@ export async function updateAccountSecrets(
   uid: string,
   secrets: Partial<AccountSecret>
 ): Promise<void> {
-  const secretRef = db.collection('account_secrets').doc(uid);
+  const secretRef = getDb().collection('account_secrets').doc(uid);
   await secretRef.set({
     ...secrets,
     updatedAt: Date.now()
