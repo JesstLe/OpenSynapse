@@ -21,6 +21,7 @@ interface ChatViewProps {
   key?: string;
   notes: Note[];
   chatSessions: ChatSession[];
+  userId?: string;
   onProcess: (note: Partial<Note>, flashcards: Partial<Flashcard>[]) => Promise<void>;
   isProcessing: boolean;
   onBackToDashboard?: () => void;
@@ -66,15 +67,16 @@ function getUserFacingAiError(error: unknown): string {
   return '抱歉，我遇到了错误。请重试。';
 }
 
-export default function ChatView({ 
-  notes, 
-  chatSessions, 
-  onProcess, 
-  isProcessing, 
-  onBackToDashboard, 
-  onSaveSession, 
-  onDeleteSession, 
-  breakthroughConfig, 
+export default function ChatView({
+  notes,
+  chatSessions,
+  userId,
+  onProcess,
+  isProcessing,
+  onBackToDashboard,
+  onSaveSession,
+  onDeleteSession,
+  breakthroughConfig,
   onClearBreakthrough,
   showHiddenPersonas = false,
   customPersonas = []
@@ -1317,7 +1319,7 @@ export default function ChatView({
             open={showImportDialog}
             onClose={() => setShowImportDialog(false)}
             existingSessions={chatSessions}
-            userId={chatSessions[0]?.userId || 'local'}
+            userId={userId || chatSessions[0]?.userId || 'local'}
             onImportSessions={async (sessions) => {
               for (const session of sessions) {
                 await onSaveSession(session);

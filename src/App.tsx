@@ -689,10 +689,11 @@ export default function App() {
             />
           )}
           {activeView === 'chat' && (
-            <ChatView 
-              key="chat" 
-              notes={notes} 
+            <ChatView
+              key="chat"
+              notes={notes}
               chatSessions={chatSessions}
+              userId={effectiveUserId || undefined}
               onProcess={handleSaveNote} 
               isProcessing={isProcessing}
               onBackToDashboard={() => setActiveView('dashboard')}
