@@ -485,6 +485,87 @@ export default function SettingsView({
     }
   };
 
+  const handleGeminiOAuthLogin = async () => {
+    const popup = window.open('about:blank', '_blank', 'popup=yes,width=520,height=720');
+    if (popup) {
+      popup.document.title = 'Gemini OAuth';
+      popup.document.body.innerHTML = `
+        <div style="min-height:100vh;display:grid;place-items:center;background:#0d0d0d;color:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+          <div style="width:min(24rem,calc(100vw - 2rem));padding:2rem;border-radius:1.5rem;background:#171717;border:1px solid rgba(255,255,255,0.08);text-align:center;box-shadow:0 24px 48px rgba(0,0,0,0.35);">
+            <div style="width:3.5rem;height:3.5rem;margin:0 auto 1rem;border-radius:1rem;display:grid;place-items:center;background:linear-gradient(135deg,#4285f4,#34a853);font-size:1.5rem;font-weight:800;">G</div>
+            <h1 style="margin:0 0 0.75rem;font-size:1.5rem;font-weight:800;">正在打开 Gemini 授权页</h1>
+            <p style="margin:0;line-height:1.6;color:rgba(255,255,255,0.72);">如果几秒后仍未跳转，请关闭此窗口后重试。</p>
+          </div>
+        </div>
+      `;
+    }
+    setIsSaving(true);
+    setFeedback(null);
+    setError(null);
+    try {
+      const response = await fetch('/api/local-config/gemini-oauth/login', {
+        method: 'POST',
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Gemini OAuth login failed.');
+      }
+
+      if (payload?.authUrl) {
+        if (popup) {
+          popup.location.replace(payload.authUrl);
+        } else {
+          window.open(payload.authUrl, '_blank', 'noopener,noreferrer');
+        }
+        setFeedback('Gemini 授权页已打开。完成浏览器登录后，设置页会自动刷新状态。');
+      } else {
+        popup?.close();
+        throw new Error('未收到 Gemini 授权地址，请重试。');
+      }
+
+      await loadStatus();
+    } catch (err) {
+      const nextError = err instanceof Error ? err.message : String(err);
+      if (popup && !popup.closed) {
+        popup.document.title = 'Gemini OAuth 打开失败';
+        popup.document.body.innerHTML = `
+          <div style="min-height:100vh;display:grid;place-items:center;background:#0d0d0d;color:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            <div style="width:min(24rem,calc(100vw - 2rem));padding:2rem;border-radius:1.5rem;background:#171717;border:1px solid rgba(255,255,255,0.08);text-align:center;box-shadow:0 24px 48px rgba(0,0,0,0.35);">
+              <div style="width:3.5rem;height:3.5rem;margin:0 auto 1rem;border-radius:1rem;display:grid;place-items:center;background:linear-gradient(135deg,#ef4444,#b91c1c);font-size:1.5rem;font-weight:800;">!</div>
+              <h1 style="margin:0 0 0.75rem;font-size:1.5rem;font-weight:800;">无法打开 Gemini 授权页</h1>
+              <p style="margin:0;line-height:1.6;color:rgba(255,255,255,0.72);">${nextError}</p>
+            </div>
+          </div>
+        `;
+      }
+      setError(nextError);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleGeminiOAuthLogout = async () => {
+    setIsSaving(true);
+    setFeedback(null);
+    setError(null);
+    try {
+      const response = await fetch('/api/local-config/gemini-oauth/logout', {
+        method: 'POST',
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.message || 'Gemini OAuth logout failed.');
+      }
+
+      setFeedback(payload?.message || 'Gemini OAuth 已退出。');
+      await loadStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleOpenPersonaModal = (persona?: Persona) => {
     if (persona) {
       setEditingPersona(persona);
@@ -662,11 +743,48 @@ export default function SettingsView({
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-3xl border border-border-main bg-card p-6 shadow-sm">
-            <div className="flex items-center gap-3">
-              <ShieldCheck className="w-5 h-5 text-accent" />
-              <h3 className="font-bold text-lg">Gemini 登录方式</h3>
+        <div className="rounded-3xl border border-border-main bg-card p-6 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <ShieldCheck className="w-5 h-5 text-accent" />
+                <h3 className="font-bold text-lg">Gemini 登录方式</h3>
+                {geminiOAuthStatus?.configured ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-3 py-1 text-xs font-bold text-green-400">
+                    <CheckCircle2 size={12} />
+                    已登录
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1 text-xs font-bold text-text-muted">
+                    <CircleOff size={12} />
+                    未登录
+                  </span>
+                )}
+              </div>
+              {geminiOAuthStatus?.email && (
+                <div className="text-xs text-text-muted">
+                  当前账号：<code>{geminiOAuthStatus.email}</code>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleGeminiOAuthLogin}
+                disabled={isSaving}
+                className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-bold text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <LogIn className="w-4 h-4" />
+                {geminiOAuthStatus?.configured ? '重新登录' : '登录 Gemini'}
+              </button>
+              <button
+                onClick={handleGeminiOAuthLogout}
+                disabled={isSaving}
+                className="inline-flex items-center gap-2 rounded-full bg-tertiary px-4 py-2 text-sm font-bold text-text-main hover:bg-secondary transition-colors disabled:opacity-50"
+              >
+                <LogOut className="w-4 h-4" />
+                退出
+              </button>
             </div>
           </div>
         </div>
@@ -686,11 +804,6 @@ export default function SettingsView({
                   <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1 text-xs font-bold text-text-muted">
                     <CircleOff size={12} />
                     未登录
-                  </span>
-                )}
-                {openAIOAuthStatus?.source === 'codex' && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1 text-xs font-bold text-text-muted">
-                    复用 ~/.codex/auth.json
                   </span>
                 )}
               </div>

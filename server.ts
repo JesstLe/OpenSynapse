@@ -14,7 +14,16 @@ import {
   loadOpenAICodexSession,
   startOpenAICodexCallbackServer,
 } from './src/lib/openaiCodexOAuth';
-import { loadCredentials as loadGeminiCredentials } from './src/lib/oauth';
+import {
+  loadCredentials as loadGeminiCredentials,
+  generatePKCE,
+  buildAuthUrl,
+  startOAuthServer,
+  exchangeCode,
+  saveCredentials,
+  deleteCredentials,
+  resolveOAuthClientConfig,
+} from './src/lib/oauth';
 
 function validateEnv() {
   const required = ['DATABASE_URL', 'BETTER_AUTH_SECRET'];
@@ -96,6 +105,28 @@ async function startServer() {
     } catch {
     } finally {
       openAIOAuthCallbackServer = null;
+    }
+  };
+
+  // Gemini OAuth flow management
+  let geminiOAuthFlow: {
+    status: 'idle' | 'pending' | 'success' | 'error';
+    authUrl?: string;
+    error?: string;
+    startedAt?: number;
+    completedAt?: number;
+  } = { status: 'idle' };
+  let geminiOAuthCallbackServer: Awaited<ReturnType<typeof startOAuthServer>> | null = null;
+
+  const closeGeminiOAuthCallbackServer = () => {
+    if (!geminiOAuthCallbackServer) {
+      return;
+    }
+    try {
+      geminiOAuthCallbackServer.close();
+    } catch {
+    } finally {
+      geminiOAuthCallbackServer = null;
     }
   };
 
@@ -287,8 +318,103 @@ async function startServer() {
     });
   });
 
-  process.once('SIGINT', closeOpenAIOAuthCallbackServer);
-  process.once('SIGTERM', closeOpenAIOAuthCallbackServer);
+  app.post('/api/local-config/gemini-oauth/login', async (_req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(404).json({ error: 'Settings API unavailable in production.' });
+    }
+
+    if (geminiOAuthFlow.status === 'pending' && geminiOAuthFlow.authUrl && geminiOAuthCallbackServer) {
+      return res.json(geminiOAuthFlow);
+    }
+
+    closeGeminiOAuthCallbackServer();
+    geminiOAuthFlow = { status: 'idle' };
+
+    try {
+      const clientConfig = resolveOAuthClientConfig();
+      const pkce = generatePKCE();
+      const state = Math.random().toString(36).substring(2);
+      const authUrl = buildAuthUrl(clientConfig.clientId, pkce, state);
+
+      const callbackServer = await startOAuthServer();
+      geminiOAuthCallbackServer = callbackServer;
+
+      geminiOAuthFlow = {
+        status: 'pending',
+        authUrl,
+        startedAt: Date.now(),
+      };
+
+      void (async () => {
+        try {
+          const result = await callbackServer.waitForCode();
+          if (!result?.code) {
+            throw new Error('Gemini OAuth 登录超时，请重新点击登录。');
+          }
+          if (result.state !== state) {
+            throw new Error('State mismatch - possible CSRF attack');
+          }
+
+          const credentials = await exchangeCode(result.code, pkce.verifier, clientConfig.clientId, clientConfig.clientSecret);
+          await saveCredentials(credentials);
+
+          geminiOAuthFlow = {
+            status: 'success',
+            startedAt: geminiOAuthFlow.startedAt,
+            completedAt: Date.now(),
+          };
+        } catch (error) {
+          geminiOAuthFlow = {
+            status: 'error',
+            error: error instanceof Error ? error.message : String(error),
+            startedAt: geminiOAuthFlow.startedAt,
+            completedAt: Date.now(),
+          };
+        } finally {
+          closeGeminiOAuthCallbackServer();
+        }
+      })();
+
+      res.json(geminiOAuthFlow);
+    } catch (error) {
+      closeGeminiOAuthCallbackServer();
+      geminiOAuthFlow = {
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
+        startedAt: Date.now(),
+        completedAt: Date.now(),
+      };
+      res.status(500).json(geminiOAuthFlow);
+    }
+  });
+
+  app.post('/api/local-config/gemini-oauth/logout', async (_req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(404).json({ error: 'Settings API unavailable in production.' });
+    }
+
+    closeGeminiOAuthCallbackServer();
+    geminiOAuthFlow = { status: 'idle' };
+
+    try {
+      await deleteCredentials();
+      res.json({ success: true, message: 'Gemini OAuth 凭证已清除。' });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  process.once('SIGINT', () => {
+    closeOpenAIOAuthCallbackServer();
+    closeGeminiOAuthCallbackServer();
+  });
+  process.once('SIGTERM', () => {
+    closeOpenAIOAuthCallbackServer();
+    closeGeminiOAuthCallbackServer();
+  });
 
   app.all("/api/auth/*", toNodeHandler(auth));
 
