@@ -207,12 +207,27 @@ router.get("/chat-sessions", requireAuth(async (req, res, userId) => {
 
 router.post("/chat-sessions", requireAuth(async (req, res, userId) => {
   try {
+    const { id, messages, ...sessionData } = req.body;
+    const sessionId = id || crypto.randomUUID();
     const session = await chatRepo.session.create({
-      id: crypto.randomUUID(),
+      id: sessionId,
       userId,
-      title: req.body.title || '新会话',
+      title: sessionData.title || '新会话',
+      ...sessionData,
     });
-    res.json(session);
+    if (messages && Array.isArray(messages)) {
+      for (const msg of messages) {
+        await chatRepo.message.create({
+          id: crypto.randomUUID(),
+          sessionId: sessionId,
+          role: msg.role,
+          content: msg.text || msg.content || '',
+          thinking: msg.thought || msg.thinking,
+          image: msg.image,
+        });
+      }
+    }
+    res.json({ ...session, messages: messages || [] });
   } catch (error) {
     console.error("Failed to create chat session:", error);
     res.status(500).json({ error: "Failed to create chat session" });
@@ -259,6 +274,7 @@ router.delete("/chat-sessions/:id", requireAuth(async (req, res, userId) => {
     if (existing.userId !== userId) {
       return res.status(403).json({ error: "Forbidden" });
     }
+    await chatRepo.message.deleteBySession(req.params.id);
     await chatRepo.session.delete(req.params.id);
     res.json({ success: true });
   } catch (error) {

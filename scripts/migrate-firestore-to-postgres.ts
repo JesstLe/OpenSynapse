@@ -3,11 +3,13 @@
  * Firestore to PostgreSQL Migration Script
  * 
  * This script migrates data from Firebase Firestore to PostgreSQL.
+ * 
+ * Prerequisites:
+ *   npm install --save-dev firebase-admin
+ * 
  * Run with: npx tsx scripts/migrate-firestore-to-postgres.ts
  */
 
-import { initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
 import { db } from '../src/db';
 import { notes, flashcards, chatSessions, chatMessages, apiKeys, customPersonas } from '../src/db/schema';
 import * as fs from 'fs';
@@ -42,14 +44,24 @@ const stats: MigrationStats = {
 };
 
 async function initializeFirebase() {
+  let firebaseAdmin;
+  try {
+    firebaseAdmin = await import('firebase-admin/app');
+  } catch {
+    console.error('Error: firebase-admin is not installed.');
+    console.error('Please run: npm install --save-dev firebase-admin');
+    process.exit(1);
+  }
+  
   const serviceAccount = JSON.parse(
     fs.readFileSync(path.resolve(FIREBASE_SERVICE_ACCOUNT_PATH!), 'utf-8')
   );
   
-  initializeApp({
-    credential: cert(serviceAccount),
+  firebaseAdmin.initializeApp({
+    credential: firebaseAdmin.cert(serviceAccount),
   });
   
+  const { getFirestore } = await import('firebase-admin/firestore');
   return getFirestore();
 }
 
@@ -61,7 +73,7 @@ function convertTimestamp(timestamp: any): Date | null {
   return null;
 }
 
-async function migrateNotes(firestore: ReturnType<typeof getFirestore>) {
+async function migrateNotes(firestore: any) {
   console.log('Migrating notes...');
   const snapshot = await firestore.collection('notes').get();
   
@@ -95,7 +107,7 @@ async function migrateNotes(firestore: ReturnType<typeof getFirestore>) {
   console.log(`  Notes migrated: ${stats.notes.migrated}, errors: ${stats.notes.errors}`);
 }
 
-async function migrateFlashcards(firestore: ReturnType<typeof getFirestore>) {
+async function migrateFlashcards(firestore: any) {
   console.log('Migrating flashcards...');
   const snapshot = await firestore.collection('flashcards').get();
   
@@ -136,7 +148,7 @@ async function migrateFlashcards(firestore: ReturnType<typeof getFirestore>) {
   console.log(`  Flashcards migrated: ${stats.flashcards.migrated}, errors: ${stats.flashcards.errors}`);
 }
 
-async function migrateChatSessions(firestore: ReturnType<typeof getFirestore>) {
+async function migrateChatSessions(firestore: any) {
   console.log('Migrating chat sessions...');
   const snapshot = await firestore.collection('chat_sessions').get();
   
@@ -152,6 +164,10 @@ async function migrateChatSessions(firestore: ReturnType<typeof getFirestore>) {
           title: data.title || 'New Session',
           model: data.model,
           personaId: data.personaId,
+          source: data.source,
+          importedAt: convertTimestamp(data.importedAt),
+          fingerprint: data.fingerprint,
+          originalExportedAt: data.originalExportedAt,
           createdAt: convertTimestamp(data.createdAt) || new Date(),
           updatedAt: convertTimestamp(data.updatedAt) || new Date(),
         }).onConflictDoNothing();
@@ -167,6 +183,7 @@ async function migrateChatSessions(firestore: ReturnType<typeof getFirestore>) {
                 role: msg.role,
                 content: msg.text || msg.content || '',
                 thinking: msg.thought || msg.thinking,
+                image: msg.image,
                 createdAt: new Date(),
               });
               stats.chatMessages.migrated++;
@@ -189,7 +206,7 @@ async function migrateChatSessions(firestore: ReturnType<typeof getFirestore>) {
   console.log(`  Chat messages migrated: ${stats.chatMessages.migrated}, errors: ${stats.chatMessages.errors}`);
 }
 
-async function migrateApiKeys(firestore: ReturnType<typeof getFirestore>) {
+async function migrateApiKeys(firestore: any) {
   console.log('Migrating API keys...');
   const snapshot = await firestore.collection('account_secrets').get();
   
@@ -221,7 +238,7 @@ async function migrateApiKeys(firestore: ReturnType<typeof getFirestore>) {
   console.log(`  API keys migrated: ${stats.apiKeys.migrated}, errors: ${stats.apiKeys.errors}`);
 }
 
-async function migrateCustomPersonas(firestore: ReturnType<typeof getFirestore>) {
+async function migrateCustomPersonas(firestore: any) {
   console.log('Migrating custom personas...');
   const snapshot = await firestore.collection('custom_personas').get();
   
