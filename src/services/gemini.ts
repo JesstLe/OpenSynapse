@@ -141,7 +141,7 @@ export async function chatWithAI(messages: ChatMessage[], allNotes: Note[], pers
   const recentMessages = messages.slice(-12);
   const contents = buildContentParts(recentMessages);
   
-  // 使用选定的人格，默认为计算机导师
+  // 使用选定的人格，默认为预设人格（数学导师）
   const activePersona = persona || PRESET_PERSONAS.find(p => p.id === DEFAULT_PERSONA_ID)!;
   const systemInstruction = useRAG 
     ? getSystemInstruction(contextText, activePersona) 
@@ -179,7 +179,7 @@ export async function* chatWithAIStream(
   const recentMessages = messages.slice(-12);
   const contents = buildContentParts(recentMessages);
   
-  // 使用选定的人格，默认为计算机导师
+  // 使用选定的人格，默认为预设人格（数学导师）
   const activePersona = persona || PRESET_PERSONAS.find(p => p.id === DEFAULT_PERSONA_ID)!;
   const systemInstruction = useRAG 
     ? getSystemInstruction(contextText, activePersona) 
