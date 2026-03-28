@@ -221,6 +221,10 @@ ${contextText}
 export async function findRelevantNotes(query: string, notes: Note[], limit: number = 3): Promise<Note[]> {
   try {
     const queryEmbedding = await generateEmbedding(query);
+    // 如果 embedding 服务不可用，返回空数组（RAG 降级）
+    if (queryEmbedding.length === 0) {
+      return [];
+    }
     return notes
       .map(note => ({
         note,
@@ -463,11 +467,21 @@ export async function deconstructUrl(url: string): Promise<{ note: Partial<Note>
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const result = await ai.models.embedContent({
-    model: EMBEDDING_MODEL,
-    contents: [text],
-  });
-  return result.embeddings[0].values;
+  try {
+    const result = await ai.models.embedContent({
+      model: EMBEDDING_MODEL,
+      contents: [text],
+    });
+    return result.embeddings[0].values;
+  } catch (error: any) {
+    // 如果 embedding 服务不可用（如未配置 Gemini API Key），返回空数组
+    // 这样 RAG 和语义搜索会优雅降级，不会阻塞主要功能
+    if (error.message?.includes('501') || error.message?.includes('embedding 仅支持')) {
+      console.warn('[Embedding] Service unavailable, returning empty array');
+      return [];
+    }
+    throw error;
+  }
 }
 
 export interface BreakthroughConfig {
@@ -605,6 +619,10 @@ ${text.slice(0, 20000)}`;
 
 export async function semanticSearch(query: string, notes: Note[]): Promise<{ note: Note, similarity: number }[]> {
   const queryEmbedding = await generateEmbedding(query);
+  // 如果 embedding 服务不可用，返回空数组
+  if (queryEmbedding.length === 0) {
+    return [];
+  }
   return notes
     .map(note => ({
       note,
@@ -615,6 +633,7 @@ export async function semanticSearch(query: string, notes: Note[]): Promise<{ no
 }
 
 function cosineSimilarity(vecA: number[], vecB: number[]): number {
+  if (vecA.length === 0 || vecB.length === 0) return 0;
   let dotProduct = 0;
   let normA = 0;
   let normB = 0;
@@ -623,5 +642,6 @@ function cosineSimilarity(vecA: number[], vecB: number[]): number {
     normA += vecA[i] * vecA[i];
     normB += vecB[i] * vecB[i];
   }
+  if (normA === 0 || normB === 0) return 0;
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
