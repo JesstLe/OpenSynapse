@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { noteRepo } from "../repositories/note.repo";
 import { flashcardRepo } from "../repositories/flashcard.repo";
 import { chatRepo } from "../repositories/chat.repo";
@@ -11,12 +11,12 @@ import { accounts } from "../db/schema";
 
 const router = Router();
 
-function toFrontendTimestamp(date: Date | null | undefined): number {
-  return date ? date.getTime() : Date.now();
+function toFrontendTimestamp(date: Date | null | undefined): number | null {
+  return date ? date.getTime() : null;
 }
 
-function toDbDate(timestamp: number | undefined): Date {
-  return timestamp ? new Date(timestamp) : new Date();
+function toDbDate(timestamp: number | undefined): Date | null {
+  return timestamp ? new Date(timestamp) : null;
 }
 
 function mapNoteToFrontend(note: any) {
@@ -252,7 +252,7 @@ router.get("/chat-sessions", requireAuth(async (req, res, userId) => {
 
 router.post("/chat-sessions", requireAuth(async (req, res, userId) => {
   try {
-    const { id, messages, ...sessionData } = req.body;
+    const { id, messages, userId: _userId, ...sessionData } = req.body;
     const sessionId = id || crypto.randomUUID();
     const session = await chatRepo.session.create({
       id: sessionId,
@@ -288,7 +288,7 @@ router.put("/chat-sessions/:id", requireAuth(async (req, res, userId) => {
     if (existing.userId !== userId) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const { messages, ...sessionData } = req.body;
+    const { messages, userId: _userId, ...sessionData } = req.body;
     const session = await chatRepo.session.update(req.params.id, sessionData);
     if (messages && Array.isArray(messages)) {
       await chatRepo.message.deleteBySession(req.params.id);
@@ -457,7 +457,7 @@ router.post("/account/unlink-provider", requireAuth(async (req, res, userId) => 
       return res.status(400).json({ error: "Cannot unlink the only remaining login method" });
     }
     
-    await db.delete(accounts).where(eq(accounts.providerId, provider));
+    await db.delete(accounts).where(and(eq(accounts.userId, userId), eq(accounts.providerId, provider)));
     
     res.json({ success: true });
   } catch (error) {

@@ -27,15 +27,25 @@ function validateEnv() {
   }
 
   const socialProviders = [
-    { name: 'Google', id: 'GOOGLE_CLIENT_ID' },
-    { name: 'GitHub', id: 'GITHUB_CLIENT_ID' },
-    { name: 'Discord', id: 'DISCORD_CLIENT_ID' },
+    { name: 'Google', id: 'GOOGLE_CLIENT_ID', secret: 'GOOGLE_CLIENT_SECRET' },
+    { name: 'GitHub', id: 'GITHUB_CLIENT_ID', secret: 'GITHUB_CLIENT_SECRET' },
+    { name: 'Discord', id: 'DISCORD_CLIENT_ID', secret: 'DISCORD_CLIENT_SECRET' },
   ];
-  
-  const configured = socialProviders.filter(p => process.env[p.id]);
+
+  const configured = socialProviders.filter(p => process.env[p.id] && process.env[p.secret]);
+  const partial = socialProviders.filter(p => process.env[p.id] && !process.env[p.secret]);
+
+  if (partial.length > 0) {
+    console.warn('⚠️  Incomplete social provider configuration:');
+    partial.forEach(p => console.warn(`   - ${p.name}: missing ${p.secret}`));
+  }
+
   if (configured.length === 0) {
     console.warn('⚠️  No social login providers configured.');
-    console.warn('   Set GOOGLE_CLIENT_ID, GITHUB_CLIENT_ID, or DISCORD_CLIENT_ID');
+    console.warn('   Set both CLIENT_ID and CLIENT_SECRET for at least one provider:');
+    console.warn('   - GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET');
+    console.warn('   - GITHUB_CLIENT_ID + GITHUB_CLIENT_SECRET');
+    console.warn('   - DISCORD_CLIENT_ID + DISCORD_CLIENT_SECRET');
   } else {
     console.log('✅ Configured login providers:', configured.map(p => p.name).join(', '));
   }
