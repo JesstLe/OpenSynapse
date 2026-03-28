@@ -16,9 +16,36 @@ import {
 } from './src/lib/openaiCodexOAuth';
 import { loadCredentials as loadGeminiCredentials } from './src/lib/oauth';
 
+function validateEnv() {
+  const required = ['DATABASE_URL', 'JWT_SECRET'];
+  const missing = required.filter(key => !process.env[key]);
+  if (missing.length > 0) {
+    console.error('❌ Missing required environment variables:');
+    missing.forEach(key => console.error(`   - ${key}`));
+    console.error('\nPlease set these in your .env.local file');
+    process.exit(1);
+  }
+
+  const socialProviders = [
+    { name: 'Google', id: 'GOOGLE_CLIENT_ID' },
+    { name: 'GitHub', id: 'GITHUB_CLIENT_ID' },
+    { name: 'Discord', id: 'DISCORD_CLIENT_ID' },
+  ];
+  
+  const configured = socialProviders.filter(p => process.env[p.id]);
+  if (configured.length === 0) {
+    console.warn('⚠️  No social login providers configured.');
+    console.warn('   Set GOOGLE_CLIENT_ID, GITHUB_CLIENT_ID, or DISCORD_CLIENT_ID');
+  } else {
+    console.log('✅ Configured login providers:', configured.map(p => p.name).join(', '));
+  }
+}
+
 async function startServer() {
+  validateEnv();
+  
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   const DATA_FILE = path.join(process.cwd(), "data.json");
   const ENV_FILE = path.join(process.cwd(), ".env.local");
   const LOCAL_PROVIDER_ENV_VARS = [
