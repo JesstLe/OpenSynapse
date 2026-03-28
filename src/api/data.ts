@@ -3,6 +3,7 @@ import { noteRepo } from "../repositories/note.repo";
 import { flashcardRepo } from "../repositories/flashcard.repo";
 import { chatRepo } from "../repositories/chat.repo";
 import { apiKeyRepo } from "../repositories/apiKey.repo";
+import { personaRepo } from "../repositories/persona.repo";
 import { auth } from "../auth/server";
 
 const router = Router();
@@ -275,6 +276,68 @@ router.put("/api-keys", requireAuth(async (req, res, userId) => {
   } catch (error) {
     console.error("Failed to update API keys:", error);
     res.status(500).json({ error: "Failed to update API keys" });
+  }
+}));
+
+router.get("/personas", requireAuth(async (req, res, userId) => {
+  try {
+    const personas = await personaRepo.findByUser(userId);
+    res.json(personas);
+  } catch (error) {
+    console.error("Failed to list personas:", error);
+    res.status(500).json({ error: "Failed to list personas" });
+  }
+}));
+
+router.post("/personas", requireAuth(async (req, res, userId) => {
+  try {
+    const persona = await personaRepo.create({
+      id: crypto.randomUUID(),
+      userId,
+      name: req.body.name,
+      description: req.body.description,
+      systemPrompt: req.body.systemPrompt,
+      icon: req.body.icon,
+      isHidden: req.body.isHidden || false,
+    });
+    res.json(persona);
+  } catch (error) {
+    console.error("Failed to create persona:", error);
+    res.status(500).json({ error: "Failed to create persona" });
+  }
+}));
+
+router.put("/personas/:id", requireAuth(async (req, res, userId) => {
+  try {
+    const existing = await personaRepo.findById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: "Persona not found" });
+    }
+    if (existing.userId !== userId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const persona = await personaRepo.update(req.params.id, req.body);
+    res.json(persona);
+  } catch (error) {
+    console.error("Failed to update persona:", error);
+    res.status(500).json({ error: "Failed to update persona" });
+  }
+}));
+
+router.delete("/personas/:id", requireAuth(async (req, res, userId) => {
+  try {
+    const existing = await personaRepo.findById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: "Persona not found" });
+    }
+    if (existing.userId !== userId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    await personaRepo.delete(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete persona:", error);
+    res.status(500).json({ error: "Failed to delete persona" });
   }
 }));
 
