@@ -217,6 +217,8 @@ function extractChatGptMapping(mapping: Record<string, any>, warnings: string[])
  *   - ## User / ## Gemini / ## Assistant / ## Model
  *   - **User:** / **Gemini:** / **Assistant:**
  *   - > User: / > Gemini:
+ *   - # you asked / # gemini response (Gemini 网页导出格式)
+ *   - > From: https://gemini.google.com/ (Gemini 网页导出带来源链接)
  */
 export function parseMarkdownImport(raw: string): ParseResult {
   const warnings: string[] = [];
@@ -257,7 +259,7 @@ export function parseMarkdownImport(raw: string): ParseResult {
         }
       }
     } else {
-      // 最后尝试简单的 "角色:" 分隔
+      // 尝试简单的 "角色:" 分隔
       const simplePattern = /^(User|Gemini|Assistant|Model|Human|You|AI)\s*[:：]\s*/gmi;
       const simpleMatches = [...raw.matchAll(simplePattern)];
 
@@ -273,12 +275,32 @@ export function parseMarkdownImport(raw: string): ParseResult {
             messages.push({ role, text });
           }
         }
+      } else {
+        // 新增：支持 Gemini 网页导出的原生格式
+        // # you asked / # gemini response
+        const geminiWebPattern = /^#\s+(you asked|gemini response)\s*$/gmi;
+        const geminiWebMatches = [...raw.matchAll(geminiWebPattern)];
+
+        if (geminiWebMatches.length >= 2) {
+          for (let i = 0; i < geminiWebMatches.length; i++) {
+            const match = geminiWebMatches[i];
+            // "you asked" -> user, "gemini response" -> model
+            const role = match[1].toLowerCase().includes('you') ? 'user' : 'model';
+            const start = match.index! + match[0].length;
+            const end = i < geminiWebMatches.length - 1 ? geminiWebMatches[i + 1].index! : raw.length;
+            const text = raw.slice(start, end).trim();
+
+            if (text) {
+              messages.push({ role, text });
+            }
+          }
+        }
       }
     }
   }
 
   if (messages.length === 0) {
-    throw new Error('无法从 Markdown 中识别出对话轮次。请确保内容包含类似 "## User" / "## Gemini" 的角色标记。');
+    throw new Error('无法从 Markdown 中识别出对话轮次。请确保内容包含类似 "## User" / "## Gemini" 或 "# you asked" / "# gemini response" 的角色标记。');
   }
 
   // 尝试从开头提取标题
