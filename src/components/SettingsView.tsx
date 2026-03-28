@@ -27,7 +27,10 @@ import {
 import {
   AI_MODEL_OPTIONS,
   AI_PROVIDERS,
+  EMBEDDING_MODEL_OPTIONS,
+  getPreferredEmbeddingModel,
   getPreferredStructuredModel,
+  setPreferredEmbeddingModel as persistPreferredEmbeddingModel,
   setPreferredStructuredModel as persistPreferredStructuredModel,
 } from '../lib/aiModels';
 import { Note, Flashcard, ChatSession, Persona } from '../types';
@@ -127,6 +130,7 @@ export default function SettingsView({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [structuredModel, setStructuredModel] = useState(() => getPreferredStructuredModel());
+  const [embeddingModel, setEmbeddingModel] = useState(() => getPreferredEmbeddingModel());
 
   const [userApiKeys, setUserApiKeys] = useState<UserApiKeys | null>(null);
   const [isLoadingUserKeys, setIsLoadingUserKeys] = useState(false);
@@ -186,6 +190,16 @@ export default function SettingsView({
   const structuredModelLabel = useMemo(
     () => structuredModelOptions.find((option) => option.id === structuredModel)?.label ?? structuredModel,
     [structuredModel, structuredModelOptions]
+  );
+
+  const embeddingModelLabel = useMemo(
+    () => EMBEDDING_MODEL_OPTIONS.find((option) => option.id === embeddingModel)?.label ?? embeddingModel,
+    [embeddingModel]
+  );
+
+  const embeddingReady = useMemo(
+    () => Boolean(providerStatus['GEMINI_API_KEY']?.configured || userApiKeys?.gemini?.apiKey),
+    [providerStatus, userApiKeys]
   );
 
   const hasUnsavedChanges = useMemo(
@@ -574,6 +588,13 @@ export default function SettingsView({
     setFeedback(`知识提炼模型已保存为：${savedModel}`);
   };
 
+  const handleSaveEmbeddingModel = () => {
+    setError(null);
+    const savedModel = persistPreferredEmbeddingModel(embeddingModel);
+    setEmbeddingModel(savedModel);
+    setFeedback(`Embedding 模型已保存为：${savedModel}`);
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-6 md:p-10 bg-primary text-text-main">
       <div className="max-w-5xl mx-auto space-y-8">
@@ -735,6 +756,53 @@ export default function SettingsView({
 
             <button
               onClick={handleSaveStructuredModel}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-bold text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover"
+            >
+              <Save className="w-4 h-4" />
+              保存
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-border-main bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <Sigma className="w-5 h-5 text-accent" />
+            <h3 className="font-bold text-lg">Embedding 通道</h3>
+          </div>
+          <p className="text-sm text-text-sub leading-relaxed mb-4">
+            语义搜索、知识链接和 RAG 的向量生成与聊天模型解耦。当前 embedding 仅支持 Gemini API Key 路径，
+            所以你可以继续使用 GLM / Kimi / GPT 聊天，同时单独保留 Gemini 作为 embedding 提供商。
+          </p>
+
+          <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-widest text-text-muted">Embedding 模型</label>
+              <select
+                value={embeddingModel}
+                onChange={(e) => setEmbeddingModel(e.target.value)}
+                className="w-full rounded-2xl border border-border-main bg-secondary px-4 py-3 text-sm text-text-main outline-none focus:border-accent/40"
+              >
+                {EMBEDDING_MODEL_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label} ({option.id})
+                  </option>
+                ))}
+              </select>
+              <div className="text-xs text-text-muted">
+                当前选择：<code>{embeddingModelLabel}</code> · <code>{embeddingModel}</code>
+              </div>
+              <div className={cn(
+                "text-xs",
+                embeddingReady ? "text-green-400" : "text-amber-400"
+              )}>
+                {embeddingReady
+                  ? '已检测到 Gemini API Key，语义功能将保持开启。'
+                  : '当前未检测到 Gemini API Key。聊天仍可继续，但语义搜索、知识链接与 RAG 会优雅降级。'}
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveEmbeddingModel}
               className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-bold text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover"
             >
               <Save className="w-4 h-4" />

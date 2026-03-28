@@ -77,9 +77,10 @@ export const AI_PROVIDERS: Record<AIProviderId, AIProviderDefinition> = {
 
 export const DEFAULT_TEXT_MODEL = 'gemini/gemini-2.5-flash';
 export const DEFAULT_STRUCTURED_MODEL = 'gemini/gemini-2.5-flash';
-export const EMBEDDING_MODEL = 'gemini-embedding-2-preview';
+export const DEFAULT_EMBEDDING_MODEL = 'gemini/gemini-embedding-2-preview';
 export const TEXT_MODEL_STORAGE_KEY = 'opensynapse.preferred-text-model';
 export const STRUCTURED_MODEL_STORAGE_KEY = 'opensynapse.preferred-structured-model';
+export const EMBEDDING_MODEL_STORAGE_KEY = 'opensynapse.preferred-embedding-model';
 
 export const AI_MODEL_OPTIONS: AIModelOption[] = [
   {
@@ -300,6 +301,18 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
   },
 ];
 
+export const EMBEDDING_MODEL_OPTIONS: AIModelOption[] = [
+  {
+    id: 'gemini/gemini-embedding-2-preview',
+    provider: 'gemini',
+    model: 'gemini-embedding-2-preview',
+    label: 'Gemini Embedding 2',
+    description: '用于语义搜索、知识链接与 RAG 的向量模型。',
+    lifecycle: 'preview',
+    docsUrl: 'https://ai.google.dev/gemini-api/docs/embeddings',
+  },
+];
+
 export const MODEL_FALLBACKS: Record<string, string[]> = {
   'gemini/gemini-3-flash-preview': ['gemini/gemini-2.5-flash', 'gemini/gemini-2.5-flash-lite'],
   'gemini/gemini-3.1-pro-preview': ['gemini/gemini-2.5-pro', 'gemini/gemini-2.5-flash-lite'],
@@ -411,6 +424,22 @@ export function getPreferredStructuredModel(): string {
   return normalizeModelId(window.localStorage.getItem(STRUCTURED_MODEL_STORAGE_KEY));
 }
 
+export function getPreferredEmbeddingModel(): string {
+  if (!canUseLocalStorage()) {
+    return DEFAULT_EMBEDDING_MODEL;
+  }
+
+  const saved = window.localStorage.getItem(EMBEDDING_MODEL_STORAGE_KEY);
+  if (!saved) {
+    return DEFAULT_EMBEDDING_MODEL;
+  }
+
+  const normalized = normalizeModelId(saved);
+  return EMBEDDING_MODEL_OPTIONS.some((option) => option.id === normalized)
+    ? normalized
+    : DEFAULT_EMBEDDING_MODEL;
+}
+
 export function setPreferredTextModel(modelId: string): string {
   const normalized = normalizeModelId(modelId);
   if (canUseLocalStorage()) {
@@ -425,6 +454,18 @@ export function setPreferredStructuredModel(modelId: string): string {
     window.localStorage.setItem(STRUCTURED_MODEL_STORAGE_KEY, normalized);
   }
   return normalized;
+}
+
+export function setPreferredEmbeddingModel(modelId: string): string {
+  const normalized = normalizeModelId(modelId);
+  const safeValue = EMBEDDING_MODEL_OPTIONS.some((option) => option.id === normalized)
+    ? normalized
+    : DEFAULT_EMBEDDING_MODEL;
+
+  if (canUseLocalStorage()) {
+    window.localStorage.setItem(EMBEDDING_MODEL_STORAGE_KEY, safeValue);
+  }
+  return safeValue;
 }
 
 export function isKnownTextModel(modelId: string): boolean {

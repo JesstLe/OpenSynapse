@@ -174,6 +174,29 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+function sanitizeNoteForStorage(note: Note) {
+  const payload: Record<string, any> = {
+    id: note.id,
+    title: note.title,
+    summary: note.summary,
+    content: note.content,
+    tags: note.tags,
+    relatedIds: note.relatedIds,
+    createdAt: note.createdAt,
+    userId: note.userId,
+  };
+
+  if (typeof note.codeSnippet === 'string') {
+    payload.codeSnippet = note.codeSnippet;
+  }
+
+  if (Array.isArray(note.embedding)) {
+    payload.embedding = note.embedding;
+  }
+
+  return payload;
+}
+
 const appEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env;
 const DEV_AUTH_BYPASS_ENABLED = Boolean(appEnv?.DEV) && appEnv?.VITE_DISABLE_AUTH !== '0';
 const DEV_USER_ID = '__dev_local_user__';
@@ -388,12 +411,15 @@ export default function App() {
         title: newNoteData.title || '无标题笔记',
         summary: newNoteData.summary || '',
         content: newNoteData.content || '',
-        codeSnippet: newNoteData.codeSnippet,
         tags: newNoteData.tags || [],
         relatedIds: [],
         createdAt: Date.now(),
         userId: effectiveUserId,
       } as any;
+
+      if (typeof newNoteData.codeSnippet === 'string') {
+        note.codeSnippet = newNoteData.codeSnippet;
+      }
 
       // Generate embedding for semantic search
       try {
@@ -433,7 +459,7 @@ export default function App() {
 
       // Save note to Firestore
       try {
-        await setDoc(doc(db, 'notes', noteId), note);
+        await setDoc(doc(db, 'notes', noteId), sanitizeNoteForStorage(note));
       } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, `notes/${noteId}`);
       }
@@ -493,7 +519,7 @@ export default function App() {
       return;
     }
     try {
-      await setDoc(doc(db, 'notes', updatedNote.id), updatedNote);
+      await setDoc(doc(db, 'notes', updatedNote.id), sanitizeNoteForStorage(updatedNote));
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `notes/${updatedNote.id}`);
     }

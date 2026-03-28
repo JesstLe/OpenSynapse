@@ -1,7 +1,8 @@
 import { Type } from "@google/genai";
 import { Note, Flashcard, ChatMessage, Persona } from "../types";
-import { EMBEDDING_MODEL, getPreferredStructuredModel, getPreferredTextModel } from "../lib/aiModels";
+import { getPreferredEmbeddingModel, getPreferredStructuredModel, getPreferredTextModel } from "../lib/aiModels";
 import { PRESET_PERSONAS, DEFAULT_PERSONA_ID } from "../lib/personas";
+import { auth } from "../firebase";
 
 // ─── 流式 chunk 类型定义 ───
 
@@ -20,9 +21,10 @@ function isEmbeddingUnsupportedError(error: unknown): boolean {
 const ai = {
   models: {
     generateContent: async (params: any) => {
+      const headers = await getAiRequestHeaders();
       const response = await fetch('/api/ai/generateContent', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(params),
       });
       if (!response.ok) {
@@ -34,10 +36,11 @@ const ai = {
     generateContentStream: async function* (params: any): AsyncGenerator<StreamChunk> {
       const { abortSignal, ...configWithoutSignal } = params.config || {};
       const requestBody = { ...params, config: configWithoutSignal };
+      const headers = await getAiRequestHeaders();
 
       const response = await fetch('/api/ai/generateContentStream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(requestBody),
         signal: abortSignal,
       });
@@ -79,9 +82,10 @@ const ai = {
       }
     },
     embedContent: async (params: any) => {
+      const headers = await getAiRequestHeaders();
       const response = await fetch('/api/ai/embedContent', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(params),
       });
       if (!response.ok) {
@@ -91,6 +95,25 @@ const ai = {
     }
   }
 };
+
+async function getAiRequestHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      return headers;
+    }
+    const token = await user.getIdToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+  } catch (error) {
+    console.warn('[AI] Failed to attach Firebase auth token:', error);
+  }
+
+  return headers;
+}
 
 // ─── 智能 RAG 档位判断 ───
 
@@ -468,11 +491,17 @@ export async function deconstructUrl(url: string): Promise<{ note: Partial<Note>
 
 export async function generateEmbedding(text: string): Promise<number[]> {
   try {
+    const modelId = getPreferredEmbeddingModel();
     const result = await ai.models.embedContent({
-      model: EMBEDDING_MODEL,
+      model: modelId,
       contents: [text],
     });
-    return result.embeddings[0].values;
+    if (result?.degraded) {
+      return [];
+    }
+
+    const values = result?.embeddings?.[0]?.values;
+    return Array.isArray(values) ? values : [];
   } catch (error: any) {
     // 如果 embedding 服务不可用（如未配置 Gemini API Key），返回空数组
     // 这样 RAG 和语义搜索会优雅降级，不会阻塞主要功能

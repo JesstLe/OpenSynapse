@@ -37,8 +37,9 @@ function normalizeRole(role: string): 'user' | 'model' {
 function inferSource(rawSource?: string): ChatSessionSource {
   if (!rawSource) return 'gemini_import';
   const lower = rawSource.toLowerCase();
-  if (lower.includes('chatgpt') || lower.includes('openai')) return 'chatgpt_import';
+  if (lower.includes('chatgpt') || lower.includes('openai') || lower.includes('gpt')) return 'chatgpt_import';
   if (lower.includes('gemini') || lower.includes('bard')) return 'gemini_import';
+  if (lower.includes('custom') || lower.includes('手动')) return 'custom_import';
   return 'gemini_import';
 }
 
@@ -117,9 +118,38 @@ export function parseJsonImport(raw: string): ParseResult {
       });
     }
   }
+  // 情况 5：ChatGPT 分享链接格式 — 有 chat_messages 字段
+  else if (data.chat_messages && Array.isArray(data.chat_messages)) {
+    const msgs = extractChatGptShareMessages(data.chat_messages, warnings);
+    if (msgs.length > 0) {
+      conversations.push({
+        title: data.title || data.name || '导入的 ChatGPT 对话',
+        messages: msgs,
+        source: 'chatgpt_import',
+        exportedAt: data.created_at || data.timestamp,
+      });
+    }
+  }
+  // 情况 6：ChatGPT 导出工具格式 — ChatGPT Exporter / ChatGPT Save 等
+  else if (data.data && Array.isArray(data.data)) {
+    // 尝试解析 ChatGPT Exporter 格式
+    for (const item of data.data) {
+      if (item.messages && Array.isArray(item.messages)) {
+        const msgs = extractMessages(item.messages, warnings);
+        if (msgs.length > 0) {
+          conversations.push({
+            title: item.title || item.name || '导入的 ChatGPT 对话',
+            messages: msgs,
+            source: 'chatgpt_import',
+            exportedAt: item.timestamp || item.created_at || item.date,
+          });
+        }
+      }
+    }
+  }
 
   if (conversations.length === 0) {
-    throw new Error('无法从 JSON 中提取对话内容。请确认文件格式是由 SaveChat、AI Chat Exporter 等工具导出。');
+    throw new Error('无法从 JSON 中提取对话内容。请确认文件格式是由 SaveChat、AI Chat Exporter、ChatGPT 官方导出等工具导出。');
   }
 
   return { conversations, format: 'json', warnings };
@@ -206,6 +236,41 @@ function extractChatGptMapping(mapping: Record<string, any>, warnings: string[])
   }
 
   traverse(root.id || Object.keys(mapping).find(k => mapping[k] === root) || '');
+  return messages;
+}
+
+/** 从 ChatGPT 分享链接格式中提取消息 */
+function extractChatGptShareMessages(chatMessages: any[], warnings: string[]): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+
+  for (const msg of chatMessages) {
+    // ChatGPT 分享链接格式: { role: 'user' | 'assistant', content: string }
+    const role = msg.role || msg.author?.role;
+    const content = msg.content || msg.message;
+
+    if (!role || !content) {
+      continue;
+    }
+
+    // 处理 content 可能是对象的情况（如包含 parts）
+    let text = '';
+    if (typeof content === 'string') {
+      text = content;
+    } else if (content.parts && Array.isArray(content.parts)) {
+      text = content.parts.filter((p: any) => typeof p === 'string').join('\n');
+    } else if (content.text) {
+      text = content.text;
+    }
+
+    text = text.trim();
+    if (text) {
+      messages.push({
+        role: normalizeRole(role),
+        text,
+      });
+    }
+  }
+
   return messages;
 }
 
@@ -349,6 +414,108 @@ export function parseTextImport(raw: string): ParseResult {
     }],
     format: 'text',
     warnings: ['无法自动识别对话轮次，已将全部内容作为单条消息导入。你可以在对话中继续与 AI 互动。'],
+  };
+}
+
+// ─── 自定义格式解析 ───
+
+/**
+ * 自定义对话格式配置
+ */
+export interface CustomFormatConfig {
+  userMarker: string;      // 用户消息标记，如 "User:" 或 "人类："
+  assistantMarker: string; // AI 消息标记，如 "AI:" 或 "助手："
+  separator?: string;      // 消息分隔符（可选）
+}
+
+/**
+ * 解析自定义格式的对话
+ * 根据用户提供的标记来识别对话轮次
+ */
+export function parseCustomFormat(raw: string, config: CustomFormatConfig): ParseResult {
+  const warnings: string[] = [];
+  const messages: ChatMessage[] = [];
+
+  const { userMarker, assistantMarker } = config;
+
+  // 构建正则表达式来匹配两种角色
+  // 转义特殊字符
+  const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const userPattern = escapeRegExp(userMarker);
+  const assistantPattern = escapeRegExp(assistantMarker);
+
+  // 创建一个综合正则来匹配两种标记
+  const combinedPattern = new RegExp(`^(?:${userPattern}|${assistantPattern})`, 'mi');
+
+  // 检查内容是否包含任何标记
+  if (!combinedPattern.test(raw)) {
+    throw new Error(`未找到自定义标记 "${userMarker}" 或 "${assistantMarker}"。请检查标记设置是否正确。`);
+  }
+
+  // 按行分割并解析
+  const lines = raw.split('\n');
+  let currentRole: 'user' | 'model' | null = null;
+  let currentText: string[] = [];
+
+  const flushMessage = () => {
+    if (currentRole && currentText.length > 0) {
+      const text = currentText.join('\n').trim();
+      if (text) {
+        messages.push({ role: currentRole, text });
+      }
+    }
+    currentText = [];
+  };
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+
+    // 检查是否是用户标记
+    if (new RegExp(`^${userPattern}`, 'i').test(trimmedLine)) {
+      flushMessage();
+      currentRole = 'user';
+      // 提取标记后的内容
+      const content = trimmedLine.slice(userMarker.length).trim();
+      if (content) {
+        currentText.push(content);
+      }
+    }
+    // 检查是否是助手标记
+    else if (new RegExp(`^${assistantPattern}`, 'i').test(trimmedLine)) {
+      flushMessage();
+      currentRole = 'model';
+      // 提取标记后的内容
+      const content = trimmedLine.slice(assistantMarker.length).trim();
+      if (content) {
+        currentText.push(content);
+      }
+    }
+    // 普通内容行
+    else if (currentRole) {
+      currentText.push(line);
+    }
+  }
+
+  // 刷新最后一条消息
+  flushMessage();
+
+  if (messages.length === 0) {
+    throw new Error('未能从内容中解析出任何对话消息。请检查标记设置是否正确。');
+  }
+
+  if (messages.length < 2) {
+    warnings.push('只解析到一条消息，建议至少包含一个完整的问答轮次。');
+  }
+
+  return {
+    conversations: [{
+      title: '自定义格式导入的对话',
+      messages,
+      source: 'custom_import',
+    }],
+    format: 'text',
+    warnings,
   };
 }
 

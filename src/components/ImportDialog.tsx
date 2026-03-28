@@ -25,13 +25,15 @@ import {
   autoDetectAndParse,
   toSessions,
   checkDuplicate,
+  parseCustomFormat,
   ParseResult,
   ParsedConversation,
+  CustomFormatConfig,
 } from '../services/importParsers';
 
 // ─── 类型 ───
 
-type ImportTab = 'file' | 'paste';
+type ImportTab = 'file' | 'paste' | 'custom';
 
 interface ImportDialogProps {
   open: boolean;
@@ -81,6 +83,10 @@ export default function ImportDialog({
   const [isDragOver, setIsDragOver] = useState(false);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
+  const [customContent, setCustomContent] = useState('');
+  const [userMarker, setUserMarker] = useState('用户：');
+  const [assistantMarker, setAssistantMarker] = useState('助手：');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ─── 重置状态 ───
@@ -89,6 +95,9 @@ export default function ImportDialog({
     setPreview(null);
     setError(null);
     setPasteContent('');
+    setCustomContent('');
+    setUserMarker('用户：');
+    setAssistantMarker('助手：');
     setIsImporting(false);
     setIsProcessing(false);
     setImportSuccess(null);
@@ -173,6 +182,41 @@ export default function ImportDialog({
     if (!pasteContent.trim()) return;
     await processContent(pasteContent.trim());
   }, [pasteContent, processContent]);
+
+  const handleCustomFormatSubmit = useCallback(async () => {
+    if (!customContent.trim() || !userMarker.trim() || !assistantMarker.trim()) return;
+
+    setError(null);
+    setPreview(null);
+    setIsProcessing(true);
+    setImportSuccess(null);
+
+    try {
+      const config: CustomFormatConfig = {
+        userMarker: userMarker.trim(),
+        assistantMarker: assistantMarker.trim(),
+      };
+
+      const result = parseCustomFormat(customContent.trim(), config);
+      const sessions = await toSessions(result, userId);
+
+      const duplicates: PreviewState['duplicates'] = [];
+      for (const session of sessions) {
+        if (session.fingerprint) {
+          const existing = checkDuplicate(session.fingerprint, existingSessions);
+          if (existing) {
+            duplicates.push({ session, existing });
+          }
+        }
+      }
+
+      setPreview({ result, sessions, duplicates });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [customContent, userMarker, assistantMarker, userId, existingSessions]);
 
   // ─── 导入执行 ───
 
@@ -279,6 +323,18 @@ export default function ImportDialog({
                 >
                   <ClipboardPaste size={16} />
                   粘贴内容
+                </button>
+                <button
+                  onClick={() => { setActiveTab('custom'); resetState(); }}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all",
+                    activeTab === 'custom'
+                      ? "bg-card text-text-main shadow-sm"
+                      : "text-text-muted hover:text-text-main"
+                  )}
+                >
+                  <FileText size={16} />
+                  自定义格式
                 </button>
               </div>
 

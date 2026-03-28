@@ -7,6 +7,7 @@ import {
   generateContentWithApiKeyProvider,
 } from '../lib/providerGateway.js';
 import {
+  DEFAULT_EMBEDDING_MODEL,
   getApiModelId,
   parseModelSelection,
 } from '../lib/aiModels.js';
@@ -300,17 +301,37 @@ router.post('/generateContentStream', async (req, res) => {
 });
 
 router.post('/embedContent', async (req, res) => {
+  const parsed = parseModelSelection(
+    typeof req.body?.model === 'string' && req.body.model.trim()
+      ? req.body.model
+      : DEFAULT_EMBEDDING_MODEL
+  );
+
+  if (parsed.provider !== 'gemini') {
+    res.json({
+      embeddings: [{ values: [] }],
+      degraded: true,
+      reason: `当前仅支持 Gemini embedding，已跳过 ${parsed.canonicalId}。`,
+    });
+    return;
+  }
+
   const resolvedGeminiApiKey = await resolveApiKeyFromRequest(getAuthorizationHeader(req), 'gemini');
 
   if (!resolvedGeminiApiKey) {
-    res.status(501).json({
-      error: '当前服务端未配置可用的 Gemini API Key，embedding 仅支持 API Key 路径。',
+    res.json({
+      embeddings: [{ values: [] }],
+      degraded: true,
+      reason: '当前服务端未配置可用的 Gemini API Key，embedding 已优雅降级。',
     });
     return;
   }
 
   try {
-    const response = await getGeminiClient(resolvedGeminiApiKey).models.embedContent(req.body);
+    const response = await getGeminiClient(resolvedGeminiApiKey).models.embedContent({
+      ...req.body,
+      model: parsed.model,
+    });
     res.json(response);
   } catch (error: any) {
     console.error('[AI] Embed Content Error:', error);
