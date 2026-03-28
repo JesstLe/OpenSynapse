@@ -3,12 +3,17 @@ import { Note, Flashcard, ChatSession, Persona } from "../types";
 const API_BASE = "/api";
 
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string> || {}),
+  };
+  if (typeof window !== 'undefined' && (window as any).__DEV_AUTH_BYPASS__) {
+    headers['X-Dev-Bypass'] = '1';
+  }
+
   const response = await fetch(url, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
+    headers,
     credentials: "include",
   });
 

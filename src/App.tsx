@@ -102,6 +102,10 @@ const appEnv = (import.meta as { env?: Record<string, string | boolean | undefin
 const DEV_AUTH_BYPASS_ENABLED = Boolean(appEnv?.DEV) && appEnv?.VITE_DISABLE_AUTH !== '0';
 const DEV_USER_ID = '__dev_local_user__';
 
+if (DEV_AUTH_BYPASS_ENABLED) {
+  (window as any).__DEV_AUTH_BYPASS__ = true;
+}
+
 export default function App() {
   const [activeView, setActiveView] = useState<View>('chat');
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);

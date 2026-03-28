@@ -101,7 +101,11 @@ const ai = {
 };
 
 async function getAiRequestHeaders(): Promise<Record<string, string>> {
-  return { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (typeof window !== 'undefined' && (window as any).__DEV_AUTH_BYPASS__) {
+    headers['X-Dev-Bypass'] = '1';
+  }
+  return headers;
 }
 
 async function getAiRequestHeadersForModel(model?: string | null): Promise<Record<string, string>> {
