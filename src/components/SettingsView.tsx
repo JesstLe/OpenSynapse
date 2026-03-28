@@ -210,8 +210,19 @@ export default function SettingsView({
   );
 
   const embeddingReady = useMemo(
-    () => Boolean(providerStatus['GEMINI_API_KEY']?.configured || userApiKeys?.gemini?.apiKey),
-    [providerStatus, userApiKeys]
+    () => {
+      const parsed = embeddingModel.split('/')[0];
+      const providerEnvMap: Record<string, string> = {
+        gemini: 'GEMINI_API_KEY',
+        openai: 'OPENAI_API_KEY',
+        zhipu: 'ZHIPU_API_KEY',
+      };
+      const envVar = providerEnvMap[parsed];
+      if (!envVar) return false;
+      const userKeyMap: Record<string, string> = { gemini: 'gemini', openai: 'openai', zhipu: 'zhipu' };
+      return Boolean(providerStatus[envVar]?.configured || userApiKeys?.[userKeyMap[parsed] as keyof typeof userApiKeys]?.apiKey);
+    },
+    [embeddingModel, providerStatus, userApiKeys]
   );
 
   const hasUnsavedLocalConfigChanges = useMemo(
@@ -896,8 +907,8 @@ export default function SettingsView({
             <h3 className="font-bold text-lg">Embedding 通道</h3>
           </div>
           <p className="text-sm text-text-sub leading-relaxed mb-4">
-            语义搜索、知识链接和 RAG 的向量生成与聊天模型解耦。当前 embedding 仅支持 Gemini API Key 路径，
-            所以你可以继续使用 GLM / Kimi / GPT 聊天，同时单独保留 Gemini 作为 embedding 提供商。
+          语义搜索、知识链接和 RAG 的向量生成与聊天模型解耦。支持 Gemini、OpenAI、智谱等多个 embedding 提供商。
+          你可以继续使用 GLM / Kimi / GPT 聊天，同时选择任意有 API Key 的提供商作为 embedding 后端。
           </p>
 
           <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
@@ -922,8 +933,8 @@ export default function SettingsView({
                 embeddingReady ? "text-green-400" : "text-amber-400"
               )}>
                 {embeddingReady
-                  ? '已检测到 Gemini API Key，语义功能将保持开启。'
-                  : '当前未检测到 Gemini API Key。聊天仍可继续，但语义搜索、知识链接与 RAG 会优雅降级。'}
+                  ? `已检测到 ${embeddingModel.split('/')[0]} API Key，语义功能将保持开启。`
+                  : `当前 Embedding 提供商 (${embeddingModel.split('/')[0]}) 未配置 API Key。聊天仍可继续，但语义搜索、知识链接与 RAG 会优雅降级。`}
               </div>
             </div>
 
