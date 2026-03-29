@@ -43,7 +43,7 @@ export interface Persona {
   icon: string;         // Lucide 图标名称
   description: string;  // 简短描述
   systemPrompt: string; // 核心系统指令
-  category: 'cs' | 'math' | 'law' | 'finance' | 'custom' | 'hidden';
+  category: 'general' | 'cs' | 'math' | 'law' | 'finance' | 'custom' | 'hidden';
   isLocked?: boolean;    // 是否禁止编辑（系统内置人格为 true）
   isHidden?: boolean;    // 是否为隐藏状态
   userId?: string;      // 所有人 ID（自定义人格使用）
