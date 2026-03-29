@@ -488,4 +488,61 @@ router.post('/ocr/zhipu', requireAuth(async (req, res, userId) => {
   }
 }));
 
+// ─── MiniMax 图片理解服务代理 ───
+router.post('/vision/minimax', requireAuth(async (req, res, userId) => {
+  try {
+    const { imageBase64, prompt = '请详细描述这张图片的内容' } = req.body;
+    
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'Missing imageBase64' });
+    }
+
+    const apiKey = await getApiKeyForServer(userId, 'minimax') || process.env.MINIMAX_API_KEY;
+    
+    if (!apiKey) {
+      return res.status(400).json({ error: 'MINIMAX_API_KEY not configured' });
+    }
+
+    // MiniMax Token Plan 的 understand_image 工具调用
+    // 参考 MCP 工具格式: https://platform.minimaxi.com/docs/guides/token-plan-mcp-guide
+    const response = await fetch('https://api.minimaxi.com/v1/vision/understand', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
+        image_url: imageBase64, // 支持 base64 data URL
+        model: 'MiniMax-M2.7',
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      // 如果 API 不存在或返回错误，提供友好提示
+      if (response.status === 404) {
+        return res.status(400).json({ 
+          error: 'MiniMax Token Plan required',
+          message: '图片理解功能需要 MiniMax Token Plan 订阅。请访问 https://platform.minimaxi.com/subscribe/token-plan 订阅',
+          fallback: 'ocr' // 建议回退到 OCR
+        });
+      }
+      throw new Error(`Vision API error: ${response.status} ${JSON.stringify(errorData)}`);
+    }
+
+    const result = await response.json();
+    res.json({
+      description: result.text || result.description || result.content,
+      raw: result,
+    });
+  } catch (error: any) {
+    console.error('[AI] MiniMax Vision Error:', error);
+    res.status(500).json({ 
+      error: error.message || 'Vision processing failed',
+      fallback: 'ocr'
+    });
+  }
+}));
+
 export default router;

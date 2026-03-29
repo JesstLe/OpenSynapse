@@ -204,11 +204,43 @@ async function callZhipuOcr(imageBase64: string): Promise<string> {
 /**
  * 对于非 vision 模型，使用 OCR 提取图片内容并附加到消息中
  */
+/**
+ * 调用 MiniMax 图片理解 API
+ * 使用 Token Plan 的 understand_image 工具
+ */
+async function callMiniMaxVision(imageBase64: string, prompt?: string): Promise<string> {
+  try {
+    const response = await fetch('/api/ai/vision/minimax', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imageBase64,
+        prompt: prompt || '请详细描述这张图片的内容',
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      // 如果需要 Token Plan 或失败，返回空字符串让上层处理
+      if (error.fallback === 'ocr') {
+        console.warn('[MiniMax Vision] Token Plan required, falling back to OCR if available');
+      }
+      throw new Error(error.message || error.error || 'Vision request failed');
+    }
+
+    const result = await response.json();
+    return result.description || result.text || '';
+  } catch (error) {
+    console.error('[MiniMax Vision] 提取失败:', error);
+    return '';
+  }
+}
+
 async function extractImagesWithOcr(messages: ChatMessage[], modelId: string): Promise<ChatMessage[]> {
   const parsed = parseModelSelection(modelId);
   
-  // 目前仅支持智谱的 OCR
-  if (parsed.provider !== 'zhipu') {
+  // 支持智谱 OCR 和 MiniMax 图片理解
+  if (parsed.provider !== 'zhipu' && parsed.provider !== 'minimax') {
     return messages;
   }
 
@@ -216,17 +248,25 @@ async function extractImagesWithOcr(messages: ChatMessage[], modelId: string): P
   
   for (const message of messages) {
     if (message.role === 'user' && message.image) {
-      const ocrText = await callZhipuOcr(message.image);
+      let extractedContent = '';
       
-      if (ocrText) {
-        // 将 OCR 结果附加到原文本中
+      if (parsed.provider === 'minimax') {
+        // 尝试 MiniMax 图片理解
+        extractedContent = await callMiniMaxVision(message.image, message.text);
+      }
+      
+      // MiniMax 失败或未提取到内容，尝试 OCR（智谱 OCR 对中文更好）
+      if (!extractedContent) {
+        extractedContent = await callZhipuOcr(message.image);
+      }
+      
+      if (extractedContent) {
         processedMessages.push({
           ...message,
-          text: `${message.text}\n\n[图片内容]\n${ocrText}`,
-          image: undefined, // 移除图片，只保留提取的文本
+          text: `${message.text}\n\n[图片内容]\n${extractedContent}`,
+          image: undefined,
         });
       } else {
-        // OCR 失败，保留原消息
         processedMessages.push(message);
       }
     } else {

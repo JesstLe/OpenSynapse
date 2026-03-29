@@ -336,10 +336,11 @@ export default function ChatView({
       const currentModelOption = AI_MODEL_OPTIONS.find(m => m.id === selectedModel);
       const parsed = parseModelSelection(selectedModel);
       const hasVisionSupport = currentModelOption?.supportsVision;
-      const canUseOcr = parsed.provider === 'zhipu';
+      // 支持智谱 OCR 和 MiniMax 图片理解(Token Plan)
+      const canProcessImage = parsed.provider === 'zhipu' || parsed.provider === 'minimax';
       
-      if (!hasVisionSupport && !canUseOcr) {
-        alert(`当前模型 (${currentModelOption?.label || selectedModel}) 不支持图片。请切换到 Gemini、GPT 或智谱系列模型。`);
+      if (!hasVisionSupport && !canProcessImage) {
+        alert(`当前模型 (${currentModelOption?.label || selectedModel}) 不支持图片。请切换到 Gemini、GPT、智谱或 MiniMax 系列模型。`);
         return;
       }
       
