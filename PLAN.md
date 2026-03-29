@@ -53,3 +53,11 @@
 - [x] **Drizzle ORM**：使用 Drizzle ORM 进行数据库操作。
 - [x] **邮箱/密码认证**：添加邮箱/密码注册和登录功能。
 - [x] **Schema 修复**：修复 Drizzle schema 以兼容 better-auth（verifications 表、session ipAddress/userAgent 列）。
+
+## 阶段 8：默认模型与体验优化 (Default Model & UX) - [已完成]
+- [x] **默认模型切换**：默认文本模型从 Gemini 2.5 Flash 切换为 MiniMax M2.7。
+- [x] **默认 Embedding 切换**：默认向量模型从 Gemini Embedding 切换为智谱 Embedding-3。
+- [x] **通用助手人格**：新增不限领域的通用 AI 助手作为默认人格，包含 prompt injection 防护等安全边界。
+- [x] **ChatView 布局优化**：压缩 header、消息区域、输入区域的 padding 和间距，释放更多内容显示空间。
+- [x] **Chroma 懒初始化**：防止 Chroma URL 无效导致启动崩溃。
+- [x] **Auth 轮询容错**：auth session 轮询增加错误处理，服务器不可达时静默忽略。

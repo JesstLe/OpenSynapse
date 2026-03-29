@@ -1,13 +1,14 @@
 # OpenSynapse (突触) - AGENTS.md
 
-**Updated:** 2026-03-29 (Auth fixes: email/password registration, schema fixes)  
+**Updated:** 2026-03-30 (Default model MiniMax M2.7, general-chat persona, UI compact)
 **Branch:** main
 
 ## Overview
 
 OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
 
-- **多导师人格系统** - 计算机、数学、法学、金融等专业导师，每种人格有独特的教学风格
+- **多导师人格系统** - 通用助手（默认）、计算机、数学、法学、金融等专业导师，每种人格有独特的教学风格
+- **系统提示词安全边界** - 所有人格内置 prompt injection 防护、系统提示词保密、恶意内容拒绝
 - **AI 学习会话** - 流式对话、思考过程展示、停止/重新生成功能
 - **知识提炼** - 从对话或文档自动提取结构化笔记和闪卡
 - **对话导入** - 支持 JSON、Markdown、纯文本格式导入历史对话，新增Gemini网页导出格式支持
@@ -58,8 +59,9 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
   - 主题切换
 - `src/lib/personas.ts`
   - 多导师人格系统
-  - 预设人格定义（CS / 数学 / 法学 / 金融）
+  - 预设人格定义（通用助手 / CS / 数学 / 法学 / 金融）
   - 隐藏人格机制
+  - 安全边界防护（prompt injection 拒绝、系统提示词保密）
 
 ### AI Layer
 
@@ -90,6 +92,7 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
   - 多提供商模型配置
   - 模型列表与协议定义（gemini_native / openai_compat / anthropic_compat）
   - fallback 策略
+  - 默认文本模型：MiniMax M2.7，默认 Embedding：智谱 embedding-3
 - `src/services/importParsers.ts`
   - 对话导入解析器
   - 支持 JSON / Markdown / 纯文本自动检测
@@ -143,8 +146,8 @@ OpenSynapse 是一个 AI 驱动的知识复利系统，核心能力包括：
 | OAuth 登录 | `src/lib/oauth.ts` | Gemini CLI / Code Assist OAuth |
 | OpenAI OAuth | `src/lib/openaiCodexOAuth.ts` | Codex 风格 OAuth 实现 |
 | Code Assist 请求 | `src/lib/codeAssist.ts` | `cloudcode-pa.googleapis.com` |
-| 模型配置 | `src/lib/aiModels.ts` | 多提供商模型列表与 fallback 策略 |
-| 人格系统 | `src/lib/personas.ts` | 多导师人格定义与隐藏人格机制 |
+| 模型配置 | `src/lib/aiModels.ts` | 多提供商模型列表与 fallback 策略，默认 MiniMax M2.7 |
+| 人格系统 | `src/lib/personas.ts` | 多导师人格定义、通用助手（默认）、安全边界防护 |
 | 对话导入 | `src/services/importParsers.ts` | JSON/Markdown/TXT 解析与去重，支持Gemini网页导出格式 |
 | 导入弹窗 | `src/components/ImportDialog.tsx` | 文件拖拽、粘贴、预览、导入 |
 | 数学公式 | `src/components/ChatView.tsx` | LaTeX数学公式渲染（remark-math + rehype-katex） |
@@ -328,8 +331,7 @@ For commercial multi-tenant use, API keys are stored per-user in PostgreSQL.
 - `gpt-5-mini`
 
 **MiniMax:**
-- `MiniMax-M2.5`
-- `MiniMax-M2.5-highspeed`
+- `MiniMax-M2.7` (默认文本模型)
 
 **智谱 GLM:**
 - `glm-5`
@@ -357,7 +359,6 @@ For commercial multi-tenant use, API keys are stored per-user in PostgreSQL.
 
 - 每轮请求偏重
 - RAG 触发过于激进
-- 缺少编辑后重发
 
 对应改造方案见：
 
@@ -373,33 +374,6 @@ CLI 能正常，不代表 Web 聊天一定稳。
 - 模型容量不足
 - fallback 后模型也可能暂时拥挤
 
-### Firestore
-
-Firestore 不接受 `undefined` 字段。  
-保存聊天会话前如果结构里混入 `undefined`，写入会失败。
-
-### Firestore Security Rules
-
-安全规则文件位于 `config/firestore.rules`。部署方法：
-
-```bash
-# 安装 Firebase CLI
-npm install -g firebase-tools
-
-# 登录
-firebase login
-
-# 部署规则
-firebase deploy --only firestore:rules
-```
-
-**注意**：首次部署后可能需要等待几分钟才能生效。如果客户端遇到权限错误，尝试：
-1. 清除浏览器缓存
-2. 重新登录
-3. 检查规则是否正确部署到对应的数据库ID
-
-详细部署记录见 `docs/firestore-rules-deployment.md`。
-
 ### Session Persistence
 
 聊天会话通过 REST API 保存到 PostgreSQL：
@@ -414,7 +388,7 @@ firebase deploy --only firestore:rules
 
 非 Gemini provider（OpenAI/MiniMax/智谱/Moonshot）：
 
-- **Embedding 限制**：embedding 功能需要 Gemini API Key。使用其他提供商时，RAG 和语义搜索会优雅降级（返回空结果），不影响主要功能
+- **Embedding**：默认使用智谱 Embedding-3，支持所有提供商的 embedding 模型
 - **结构化 JSON 输出**：格式可能有差异，系统已添加 `safeJsonParse` 自动提取 JSON
 - **流式响应**：chunk 格式需适配，已完成 Gemini/OpenAI/MiniMax/智谱/Moonshot 的适配
 
@@ -460,7 +434,7 @@ firebase deploy --only firestore:rules
 - 不要默认要求用户自己创建 Google OAuth Desktop Client
 - 不要假设官方模型页出现的模型一定能在当前 Code Assist 后端调用
 - 不要在普通聊天里每轮都强塞长 RAG 和超长系统提示
-- 不要把 Firestore 文档写入包含 `undefined` 的对象
+- 不要把包含 `undefined` 的对象写入数据库
 
 ---
 
@@ -501,9 +475,7 @@ npx tsx cli.ts ./path/to/file.txt
 - `README.md`
   - 项目概览与快速开始
 - `docs/auth/environment-variables.md`
-  - 环境变量配置指南（微信/QQ/商业部署）
-- `docs/firestore-rules-deployment.md`
-  - Firestore安全规则部署记录
+  - 环境变量配置指南（商业部署）
 - `docs/OAUTH_USAGE.md`
   - 快速使用认证说明
 - `docs/gemini-cli-code-assist-auth-tutorial.md`
