@@ -10,7 +10,7 @@ import { ChatMessage, Note, Flashcard, ChatSession, Persona } from '../types';
 import { PRESET_PERSONAS, DEFAULT_PERSONA_ID, getCSTutorPersona } from '../lib/personas';
 import { chatWithAI, chatWithAIStream, processConversation, BreakthroughConfig, startBreakthroughChat, startBreakthroughChatStream, deconstructDocument, deconstructUrl, deconstructScannedDocument, deconstructTOC, type StreamChunk } from '../services/gemini';
 import { cn, generateUUID } from '../lib/utils';
-import { AI_MODEL_OPTIONS, getModelOption, getPreferredTextModel, isKnownTextModel, setPreferredTextModel } from '../lib/aiModels';
+import { AI_MODEL_OPTIONS, getModelOption, getPreferredTextModel, isKnownTextModel, parseModelSelection, setPreferredTextModel } from '../lib/aiModels';
 import ImportDialog from './ImportDialog';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -333,17 +333,21 @@ export default function ChatView({
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // 检查当前模型是否支持图片
       const currentModelOption = AI_MODEL_OPTIONS.find(m => m.id === selectedModel);
-      if (!currentModelOption?.supportsVision) {
-        alert(`当前模型 (${currentModelOption?.label || selectedModel}) 不支持图片。请切换到 Gemini 或 GPT 系列模型。`);
+      const parsed = parseModelSelection(selectedModel);
+      const hasVisionSupport = currentModelOption?.supportsVision;
+      const canUseOcr = parsed.provider === 'zhipu';
+      
+      if (!hasVisionSupport && !canUseOcr) {
+        alert(`当前模型 (${currentModelOption?.label || selectedModel}) 不支持图片。请切换到 Gemini、GPT 或智谱系列模型。`);
         return;
       }
-      // 限制图片大小为 5MB
+      
       if (file.size > 5 * 1024 * 1024) {
         alert('图片大小超过 5MB 限制，请选择更小的图片。');
         return;
       }
+      
       const reader = new FileReader();
       reader.onloadend = () => {
         setSelectedImage(reader.result as string);
