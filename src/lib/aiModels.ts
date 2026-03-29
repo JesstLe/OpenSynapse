@@ -43,7 +43,6 @@ export const AI_PROVIDERS: Record<AIProviderId, AIProviderDefinition> = {
     baseUrl: 'https://api.openai.com/v1',
     baseUrlEnvVar: 'OPENAI_BASE_URL',
     docsUrl: 'https://platform.openai.com/docs/models',
-    supportsVision: true,
   },
   minimax: {
     id: 'minimax',
@@ -273,6 +272,16 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     docsUrl: 'https://open.bigmodel.cn/dev/api',
   },
   {
+    id: 'zhipu/glm-4.6v',
+    provider: 'zhipu',
+    model: 'glm-4.6v',
+    label: 'GLM-4.6V',
+    description: '智谱视觉推理模型，支持图片理解。',
+    lifecycle: 'stable',
+    docsUrl: 'https://open.bigmodel.cn/dev/api',
+    supportsVision: true,
+  },
+  {
     id: 'moonshot/kimi-for-coding',
     provider: 'moonshot',
     model: 'kimi-for-coding',
@@ -338,7 +347,7 @@ export const MODEL_FALLBACKS: Record<string, string[]> = {
   'openai/gpt-5.3-codex': ['openai/gpt-5.2-codex', 'openai/gpt-5.1-codex', 'openai/gpt-5-mini'],
   'openai/gpt-5.2-pro': ['openai/gpt-5.2', 'openai/gpt-5-mini'],
   'minimax/MiniMax-M2.7': [],
-  'zhipu/glm-5': ['zhipu/glm-4.7'],
+  'zhipu/glm-5': ['zhipu/glm-4.7', 'zhipu/glm-4.6v'],
 };
 
 const LEGACY_MODEL_ALIASES: Record<string, string> = Object.fromEntries(
