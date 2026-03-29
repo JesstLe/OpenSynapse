@@ -237,15 +237,6 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     docsUrl: 'https://platform.minimax.io/docs/guide/Models/Text%20Models',
   },
   {
-    id: 'minimax/MiniMax-M2.7-highspeed',
-    provider: 'minimax',
-    model: 'MiniMax-M2.7-highspeed',
-    label: 'MiniMax M2.7 Highspeed',
-    description: 'MiniMax 低延迟版本，适合作为降级 fallback。',
-    lifecycle: 'stable',
-    docsUrl: 'https://platform.minimax.io/docs/guide/Models/Text%20Models',
-  },
-  {
     id: 'zhipu/glm-5',
     provider: 'zhipu',
     model: 'glm-5',
@@ -328,7 +319,7 @@ export const MODEL_FALLBACKS: Record<string, string[]> = {
   'openai/gpt-5.3': ['openai/gpt-5.2', 'openai/gpt-5.1', 'openai/gpt-5-mini'],
   'openai/gpt-5.3-codex': ['openai/gpt-5.2-codex', 'openai/gpt-5.1-codex', 'openai/gpt-5-mini'],
   'openai/gpt-5.2-pro': ['openai/gpt-5.2', 'openai/gpt-5-mini'],
-  'minimax/MiniMax-M2.7': ['minimax/MiniMax-M2.7-highspeed'],
+  'minimax/MiniMax-M2.7': [],
   'zhipu/glm-5': ['zhipu/glm-4.7'],
 };
 
