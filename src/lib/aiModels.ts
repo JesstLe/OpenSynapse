@@ -75,9 +75,9 @@ export const AI_PROVIDERS: Record<AIProviderId, AIProviderDefinition> = {
   },
 };
 
-export const DEFAULT_TEXT_MODEL = 'gemini/gemini-2.5-flash';
+export const DEFAULT_TEXT_MODEL = 'minimax/MiniMax-M2.5';
 export const DEFAULT_STRUCTURED_MODEL = 'gemini/gemini-2.5-flash';
-export const DEFAULT_EMBEDDING_MODEL = 'gemini/gemini-embedding-2-preview';
+export const DEFAULT_EMBEDDING_MODEL = 'zhipu/embedding-3';
 export const TEXT_MODEL_STORAGE_KEY = 'opensynapse.preferred-text-model';
 export const STRUCTURED_MODEL_STORAGE_KEY = 'opensynapse.preferred-structured-model';
 export const EMBEDDING_MODEL_STORAGE_KEY = 'opensynapse.preferred-embedding-model';
@@ -355,7 +355,7 @@ export function parseModelSelection(value: string | null | undefined): {
 } {
   const normalized = value?.trim();
   if (!normalized) {
-    return { canonicalId: DEFAULT_TEXT_MODEL, provider: 'gemini', model: 'gemini-2.5-flash' };
+    return { canonicalId: DEFAULT_TEXT_MODEL, provider: 'minimax', model: 'MiniMax-M2.5' };
   }
 
   if (normalized.includes('/')) {
