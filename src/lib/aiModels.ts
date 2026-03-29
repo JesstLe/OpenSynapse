@@ -22,6 +22,7 @@ export interface AIModelOption {
   description: string;
   lifecycle: AIModelLifecycle;
   docsUrl: string;
+  supportsVision?: boolean;
 }
 
 export const AI_PROVIDERS: Record<AIProviderId, AIProviderDefinition> = {
@@ -42,6 +43,7 @@ export const AI_PROVIDERS: Record<AIProviderId, AIProviderDefinition> = {
     baseUrl: 'https://api.openai.com/v1',
     baseUrlEnvVar: 'OPENAI_BASE_URL',
     docsUrl: 'https://platform.openai.com/docs/models',
+    supportsVision: true,
   },
   minimax: {
     id: 'minimax',
@@ -91,6 +93,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'Google Preview 模型，适合多模态与 agentic 场景。',
     lifecycle: 'preview',
     docsUrl: 'https://ai.google.dev/gemini-api/docs/models/gemini-3-flash-preview',
+    supportsVision: true,
   },
   {
     id: 'gemini/gemini-3.1-pro-preview',
@@ -100,6 +103,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'Google Preview 推理模型，适合复杂代码与长上下文任务。',
     lifecycle: 'preview',
     docsUrl: 'https://ai.google.dev/gemini-api/docs/models/gemini-3.1-pro-preview',
+    supportsVision: true,
   },
   {
     id: 'gemini/gemini-2.5-pro',
@@ -109,6 +113,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'Google 稳定版高阶推理模型。',
     lifecycle: 'stable',
     docsUrl: 'https://ai.google.dev/gemini-api/docs/models/gemini-2.5-pro',
+    supportsVision: true,
   },
   {
     id: 'gemini/gemini-2.5-flash',
@@ -118,6 +123,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'Google 稳定版高性价比模型，适合作为默认聊天模型。',
     lifecycle: 'stable',
     docsUrl: 'https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash',
+    supportsVision: true,
   },
   {
     id: 'gemini/gemini-2.5-flash-lite',
@@ -127,6 +133,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'Google 稳定版低成本模型，适合轻量任务。',
     lifecycle: 'stable',
     docsUrl: 'https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-lite',
+    supportsVision: true,
   },
   {
     id: 'openai/gpt-5.2',
@@ -136,6 +143,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'OpenAI GPT-5 通用模型，支持 Codex OAuth 或 API key。',
     lifecycle: 'stable',
     docsUrl: 'https://platform.openai.com/docs/models',
+    supportsVision: true,
   },
   {
     id: 'openai/gpt-5.2-codex',
@@ -145,6 +153,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'Codex 优化模型，适合代码与 agent 场景，支持 OpenAI Codex OAuth。',
     lifecycle: 'stable',
     docsUrl: 'https://github.com/openai/codex',
+    supportsVision: true,
   },
   {
     id: 'openai/gpt-5.1',
@@ -154,6 +163,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'OpenAI GPT-5.1 通用模型，支持 Codex OAuth 或 API key。',
     lifecycle: 'stable',
     docsUrl: 'https://github.com/openai/codex',
+    supportsVision: true,
   },
   {
     id: 'openai/gpt-5.1-codex-max',
@@ -163,6 +173,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'Codex Max 档位，适合复杂代码任务，支持 OpenAI Codex OAuth。',
     lifecycle: 'stable',
     docsUrl: 'https://github.com/openai/codex',
+    supportsVision: true,
   },
   {
     id: 'openai/gpt-5.1-codex',
@@ -172,6 +183,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'Codex 模型，适合代码审查与多步操作，支持 OpenAI Codex OAuth。',
     lifecycle: 'stable',
     docsUrl: 'https://github.com/openai/codex',
+    supportsVision: true,
   },
   {
     id: 'openai/gpt-5.1-codex-mini',
@@ -181,6 +193,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'Codex 轻量版本，支持 OpenAI Codex OAuth。',
     lifecycle: 'stable',
     docsUrl: 'https://github.com/openai/codex',
+    supportsVision: true,
   },
   {
     id: 'openai/gpt-5.4',
@@ -190,6 +203,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'OpenAI 最新 GPT-5.4 通用模型，更强的推理与代码能力。',
     lifecycle: 'stable',
     docsUrl: 'https://platform.openai.com/docs/models',
+    supportsVision: true,
   },
   {
     id: 'openai/gpt-5.3',
@@ -199,6 +213,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'OpenAI GPT-5.3 通用模型，平衡性能与成本。',
     lifecycle: 'stable',
     docsUrl: 'https://platform.openai.com/docs/models',
+    supportsVision: true,
   },
   {
     id: 'openai/gpt-5.3-codex',
@@ -208,6 +223,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'GPT-5.3 Codex 代码优化版，适合中等复杂度代码任务。',
     lifecycle: 'stable',
     docsUrl: 'https://github.com/openai/codex',
+    supportsVision: true,
   },
   {
     id: 'openai/gpt-5.2-pro',
@@ -217,6 +233,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'OpenAI 平台 API 档位，当前建议走 API key。',
     lifecycle: 'stable',
     docsUrl: 'https://platform.openai.com/docs/models',
+    supportsVision: true,
   },
   {
     id: 'openai/gpt-5-mini',
@@ -226,6 +243,7 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     description: 'OpenAI 轻量 GPT-5 模型，当前建议走 API key。',
     lifecycle: 'stable',
     docsUrl: 'https://platform.openai.com/docs/models',
+    supportsVision: true,
   },
   {
     id: 'minimax/MiniMax-M2.7',

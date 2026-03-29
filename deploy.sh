@@ -7,9 +7,9 @@ set -e
 
 # 配置
 SERVER_IP="101.133.166.67"
-SSH_KEY="./opennew.pem"
+SSH_KEY="${OPENSYNAPSE_SSH_KEY:-$HOME/.ssh/opensynapse.pem}"
 REMOTE_DIR="/www/wwwroot/opensynapse"
-LOCAL_DIR="/Users/lv/Workspace/OpenSynapse"
+LOCAL_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # 颜色输出
 RED='\033[0;31m'
