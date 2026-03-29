@@ -60,4 +60,5 @@ export interface ChatSession {
   fingerprint?: string;             // 去重指纹（基于内容哈希）
   originalExportedAt?: string;      // 原始导出时间（来自导出工具）
   personaId?: string;               // 使用的人格 ID
+  model?: string;                   // 使用的 AI 模型
 }

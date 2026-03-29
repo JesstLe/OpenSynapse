@@ -31,11 +31,12 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
   const [registerPassword, setRegisterPassword] = useState('');
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [showEmailLogin, setShowEmailLogin] = useState(false);
+  const [showEmailLogin, setShowEmailLogin] = useState(true);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -134,17 +135,28 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
     }
 
     setIsSubmitting(true);
+    setIsAutoLoggingIn(true);
     try {
-      await authClient.signUp.email({
+      const signUpResult = await authClient.signUp.email({
         email: registerEmail,
         password: registerPassword,
         name: registerEmail.split('@')[0],
       });
 
-      await authClient.signIn.email({
+      if (signUpResult.error) {
+        throw signUpResult.error;
+      }
+
+      const signInResult = await authClient.signIn.email({
         email: registerEmail,
         password: registerPassword,
       });
+
+      if (signInResult.error) {
+        throw signInResult.error;
+      }
+
+      window.location.href = window.location.origin;
     } catch (error) {
       const err = error as { message?: string; code?: string };
       if (err.code === 'EMAIL_ALREADY_IN_USE' || err.message?.includes('already')) {
@@ -152,6 +164,7 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
       } else {
         setRegisterError(err.message || '注册失败，请稍后重试');
       }
+      setIsAutoLoggingIn(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -433,7 +446,7 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
                     <button
                       type="button"
                       onClick={(e) => handleEmailLogin(e as any)}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isAutoLoggingIn}
                       className="flex-1 py-3 px-4 bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
@@ -493,7 +506,7 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
                     <input
                       type={showConfirmPassword ? "text" : "password"}
-                      placeholder="再次输入密码以确认"
+                      placeholder="确认密码（确保两次输入一致）"
                       value={registerConfirmPassword}
                       onChange={(e) => {
                         setRegisterConfirmPassword(e.target.value);
@@ -538,11 +551,11 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
                     <button
                       type="button"
                       onClick={(e) => handleRegister(e as any)}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isAutoLoggingIn}
                       className="flex-1 py-3 px-4 bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                      {isSubmitting ? "注册中..." : "创建账号并登录"}
+                      {(isSubmitting || isAutoLoggingIn) ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                      {isAutoLoggingIn ? "正在登录..." : isSubmitting ? "注册中..." : "创建账号并登录"}
                     </button>
                   </div>
                 </motion.div>

@@ -136,9 +136,7 @@ async function getAiRequestHeadersForModel(model?: string | null): Promise<Recor
 
 // ─── 智能 RAG 档位判断 ───
 
-/**
- * @deprecated 客户端 RAG 判断逻辑已迁移到服务端，后续阶段将移除。
- */
+/** 判断本轮是否需要 RAG 增强 */
 function shouldUseRAG(messages: ChatMessage[], allNotes: Note[]): boolean {
   if (allNotes.length === 0) return false;
   const lastMsg = messages.filter(m => m.role === 'user').pop()?.text || '';
@@ -169,27 +167,31 @@ function buildContentParts(messages: ChatMessage[]) {
 
 // ─── 非流式聊天（保留用于兼容和 JSON 输出场景） ───
 
-export async function chatWithAI(
-  messages: ChatMessage[],
-  userId?: string,
-  persona?: Persona,
-  options?: { enableRAG?: boolean }
-) {
+export async function chatWithAI(messages: ChatMessage[], allNotes: Note[], persona?: Persona) {
   const modelId = getPreferredTextModel();
-  const enableRAG = options?.enableRAG !== false;
+  const useRAG = shouldUseRAG(messages, allNotes);
+
+  let contextText = '';
+  if (useRAG) {
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.text || '';
+    const relevantNotes = await findRelevantNotes(lastUserMessage, allNotes);
+    if (relevantNotes.length > 0) {
+      contextText = `\n# 相关笔记\n${relevantNotes.map(n => `## ${n.title}\n${n.summary}`).join('\n---\n')}`;
+    }
+  }
 
   const recentMessages = messages.slice(-12);
   const contents = buildContentParts(recentMessages);
   
   // 使用选定的人格，默认为预设人格（数学导师）
   const activePersona = persona || PRESET_PERSONAS.find(p => p.id === DEFAULT_PERSONA_ID)!;
-  const systemInstruction = getSystemInstructionLight(activePersona);
+  const systemInstruction = useRAG 
+    ? getSystemInstruction(contextText, activePersona) 
+    : getSystemInstructionLight(activePersona);
 
   const response = await ai.models.generateContent({
     model: modelId,
-    userId,
     contents,
-    enableRAG,
     config: { systemInstruction },
   });
   return response.text;
@@ -199,12 +201,21 @@ export async function chatWithAI(
 
 export async function* chatWithAIStream(
   messages: ChatMessage[],
-  userId?: string,
+  allNotes: Note[],
   persona?: Persona,
-  options?: { enableRAG?: boolean },
   abortSignal?: AbortSignal
 ): AsyncGenerator<StreamChunk> {
   const modelId = getPreferredTextModel();
+  const useRAG = shouldUseRAG(messages, allNotes);
+
+  let contextText = '';
+  if (useRAG) {
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.text || '';
+    const relevantNotes = await findRelevantNotes(lastUserMessage, allNotes);
+    if (relevantNotes.length > 0) {
+      contextText = `\n# 相关笔记\n${relevantNotes.map(n => `## ${n.title}\n${n.summary}`).join('\n---\n')}`;
+    }
+  }
 
   // 历史裁剪：只保留最近 12 条消息，避免上下文过长导致超时
   const recentMessages = messages.slice(-12);
@@ -212,12 +223,12 @@ export async function* chatWithAIStream(
   
   // 使用选定的人格，默认为预设人格（数学导师）
   const activePersona = persona || PRESET_PERSONAS.find(p => p.id === DEFAULT_PERSONA_ID)!;
-  const systemInstruction = getSystemInstructionLight(activePersona);
+  const systemInstruction = useRAG 
+    ? getSystemInstruction(contextText, activePersona) 
+    : getSystemInstructionLight(activePersona);
 
   const stream = ai.models.generateContentStream({
     model: modelId,
-    userId,
-    enableRAG: options?.enableRAG !== false,
     contents,
     config: {
       systemInstruction,
@@ -238,11 +249,17 @@ function getSystemInstructionLight(persona: Persona): string {
   return `${persona.systemPrompt}\n\n注意：用中文回答，保持你的角色风格。`;
 }
 
+/** 完整系统提示：涉及知识检索的增强模式使用 */
+function getSystemInstruction(contextText: string, persona: Persona): string {
+  return `${persona.systemPrompt}
+
+# Context Injection
+${contextText}
+如果用户学到了相关的概念，请提及它们以建立"语义链接"。用中文回答，保持你的角色风格。`;
+}
+
 // ─── RAG 检索 ───
 
-/**
- * @deprecated 客户端向量检索将迁移到服务端，后续阶段将移除。
- */
 export async function findRelevantNotes(query: string, notes: Note[], limit: number = 3): Promise<Note[]> {
   try {
     const queryEmbedding = await generateEmbedding(query);

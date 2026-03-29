@@ -508,3 +508,66 @@ npx tsx cli.ts ./path/to/file.txt
 - 流式聊天体验已完成，支持 SSE 实时显示和停止/重新生成
 - **认证系统已迁移到 better-auth** (已替换 Firebase Auth)
 - **向量数据库使用 Chroma** (本地，替代 Firebase Vector Search)
+
+---
+
+## Deployment
+
+### Production Server
+
+- **Server**: Alibaba Cloud ECS (Ubuntu 24.04)
+- **IP**: 101.133.166.67
+- **Port**: 80 (Nginx reverse proxy) → 3000 (Node.js app)
+- **Process Manager**: PM2
+- **Database**: PostgreSQL 16
+
+### Deploy Command
+
+```bash
+./deploy.sh
+```
+
+The deploy script will:
+1. Build the frontend (`npm run build`)
+2. Sync files to server via rsync
+3. Run `npm install --production` on server
+4. Restart PM2 process
+
+### Nginx Configuration
+
+Nginx is configured as reverse proxy to hide port 3000:
+
+```nginx
+server {
+    listen 80;
+    server_name 101.133.166.67;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+### Key Files
+
+| File | Description |
+|------|-------------|
+| `deploy.sh` | Main deployment script |
+| `ecosystem.config.cjs` | PM2 configuration |
+| `nginx-opensynapse.conf` | Nginx config template |
+| `docs/DEPLOYMENT_GUIDE.md` | Detailed deployment guide |
+
+### Troubleshooting
+
+- **Server unreachable**: Check Alibaba Cloud security group (ports 22, 80, 3000)
+- **App not starting**: Check `pm2 logs opensynapse`
+- **Chat sessions not saving**: Check Better Auth `trustedOrigins` in `src/auth/server.ts`
+- **Rate limiting warnings**: Configure `trustedProxies` in auth config

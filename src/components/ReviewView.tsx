@@ -99,7 +99,14 @@ export default function ReviewView({ flashcards, notes, onBackToDashboard, onRev
           <div className="absolute inset-0 bg-card border border-border-main rounded-[24px] md:rounded-[32px] p-8 md:p-12 flex flex-col items-center justify-center text-center backface-hidden shadow-2xl">
             <div className="absolute top-6 left-6 md:top-8 md:left-8 text-[10px] uppercase tracking-[0.2em] font-black text-accent opacity-50">问题</div>
             <div className="text-xl md:text-2xl font-medium leading-relaxed text-text-main MarkdownCardWrapper">
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, {
+                macros: {
+                  '\\xlongequal': '\\stackrel\\text{#1}\\Longequal\\!\\!\\!\\!\\!\\!=',
+                  '\\Longequal': '\\Relbar',
+                },
+                strict: false,
+                trust: true,
+              }]]}>
                 {currentCard.question}
               </ReactMarkdown>
             </div>
@@ -110,7 +117,14 @@ export default function ReviewView({ flashcards, notes, onBackToDashboard, onRev
           <div className="absolute inset-0 bg-card border border-accent/30 rounded-[24px] md:rounded-[32px] p-8 md:p-12 flex flex-col items-center justify-center text-center backface-hidden shadow-2xl [transform:rotateY(180deg)]">
             <div className="absolute top-6 left-6 md:top-8 md:left-8 text-[10px] uppercase tracking-[0.2em] font-black text-green-500/50">答案</div>
             <div className="text-lg md:text-xl text-text-sub leading-relaxed MarkdownCardWrapper">
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, {
+                macros: {
+                  '\\xlongequal': '\\stackrel\\text{#1}\\Longequal\\!\\!\\!\\!\\!\\!=',
+                  '\\Longequal': '\\Relbar',
+                },
+                strict: false,
+                trust: true,
+              }]]}>
                 {currentCard.answer}
               </ReactMarkdown>
             </div>

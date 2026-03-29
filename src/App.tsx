@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { Note, Flashcard, ChatMessage, ChatSession, Persona } from './types';
 import { chatWithAI, processConversation, findSemanticLinks, generateEmbedding, BreakthroughConfig, startBreakthroughChat } from './services/gemini';
-import { cn } from './lib/utils';
+import { cn, generateUUID } from './lib/utils';
 import { schedule, Rating } from './services/maimemo';
 import { authClient } from './auth/client';
 
@@ -89,6 +89,7 @@ function sanitizeChatSession(session: ChatSession, userId: string) {
   if (session.fingerprint) base.fingerprint = session.fingerprint;
   if (session.originalExportedAt) base.originalExportedAt = session.originalExportedAt;
   if (session.personaId) base.personaId = session.personaId;
+  if (session.model) base.model = session.model;
   return base;
 }
 
@@ -286,7 +287,7 @@ export default function App() {
     if (!effectiveUserId) return;
     setIsProcessing(true);
     try {
-      const noteId = crypto.randomUUID();
+      const noteId = generateUUID();
       const note: Note = {
         id: noteId,
         title: newNoteData.title || '无标题笔记',
@@ -315,7 +316,7 @@ export default function App() {
       note.relatedIds = relatedIds;
 
       const cards: Flashcard[] = newFlashcards.map(cf => ({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         noteId: noteId,
         question: cf.question || '',
         answer: cf.answer || '',

@@ -35,7 +35,7 @@ import {
 } from '../lib/aiModels';
 import { Note, Flashcard, ChatSession, Persona } from '../types';
 import { DEFAULT_PERSONA_ID } from '../lib/personas';
-import { cn } from '../lib/utils';
+import { cn, generateUUID } from '../lib/utils';
 interface User {
   id: string;
   email?: string;
@@ -600,7 +600,7 @@ export default function SettingsView({
     setIsSaving(true);
     try {
       const personaToSave: Persona = {
-        id: editingPersona?.id || `custom-${crypto.randomUUID()}`,
+        id: editingPersona?.id || `custom-${generateUUID()}`,
         name: personaForm.name || '新导师',
         icon: personaForm.icon || 'Sparkles',
         description: personaForm.description || '',
@@ -1297,13 +1297,33 @@ export default function SettingsView({
                       </div>
                       <div>
                         <h4 className="font-bold text-text-main">Google 账号</h4>
-                        <p className="text-xs text-text-sub">{user.email || user.name || '已登录'}</p>
+                        <p className="text-xs text-text-sub">
+                          {isProviderConnected('google') ? '已绑定 Google 账号' : '未绑定'}
+                        </p>
                       </div>
                     </div>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-3 py-1 text-xs font-bold text-green-400">
-                      <CheckCircle2 size={12} />
-                      已绑定
-                    </span>
+                    {isProviderConnected('google') ? (
+                      <button
+                        onClick={() => void handleUnlinkProvider('google')}
+                        disabled={isUnlinking === 'google'}
+                        className="px-4 py-2 rounded-full bg-tertiary text-text-main text-sm font-bold hover:bg-secondary transition-colors disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {isUnlinking === 'google' ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <CircleOff className="w-4 h-4" />
+                        )}
+                        解绑
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleBindProvider('google')}
+                        className="px-4 py-2 rounded-full bg-accent text-white text-sm font-bold hover:bg-accent-hover transition-all flex items-center gap-2 shadow-lg shadow-accent/20"
+                      >
+                        <LogIn className="w-4 h-4" />
+                        去绑定
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between p-4 rounded-2xl bg-secondary/50 border border-border-main">

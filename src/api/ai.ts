@@ -20,7 +20,6 @@ import {
 import { getApiKeyConfigForServer } from '../services/userApiKeyService.server.js';
 import { auth } from '../auth/server.js';
 import { requireAuth } from './auth-middleware.js';
-import { shouldRetrieveRAG } from './rag.js';
 
 dotenv.config({ path: '.env.local' });
 
@@ -233,55 +232,6 @@ function getAuthorizationHeader(req: express.Request): string | undefined {
     : undefined;
 }
 
-function extractLastUserMessage(contents: any[]): string {
-  if (!Array.isArray(contents)) return '';
-  for (let i = contents.length - 1; i >= 0; i -= 1) {
-    if (contents[i]?.role === 'user') {
-      const parts = contents[i]?.parts;
-      if (Array.isArray(parts)) {
-        const textPart = parts.find((p: any) => typeof p.text === 'string');
-        if (textPart) return textPart.text;
-      }
-    }
-  }
-  return '';
-}
-
-async function injectRagContextIfEnabled(req: express.Request, userId: string): Promise<void> {
-  const { enableRAG = true } = req.body || {};
-  if (!enableRAG) {
-    return;
-  }
-
-  try {
-    const lastUserMessage = extractLastUserMessage(req.body?.contents);
-    if (!lastUserMessage || !shouldRetrieveRAG(lastUserMessage)) {
-      return;
-    }
-
-    const { hybridSearch, buildRAGContext } = await import('./rag.js');
-    const ragTimeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('RAG search timeout')), 3000)
-    );
-    const results = await Promise.race([
-      hybridSearch(userId, lastUserMessage),
-      ragTimeout,
-    ]);
-    if (results.length === 0) {
-      return;
-    }
-
-    const ragContext = buildRAGContext(results);
-    const existingInstruction = req.body?.config?.systemInstruction || '';
-    if (!req.body.config) req.body.config = {};
-    req.body.config.systemInstruction = existingInstruction
-      ? `${existingInstruction}\n\n# 相关知识\n${ragContext}`
-      : `# 相关知识\n${ragContext}`;
-  } catch (error) {
-    console.warn('[AI] RAG injection failed, continuing without context:', error);
-  }
-}
-
 function getGeminiClient(resolvedGeminiApiKey: string): GoogleGenAI {
   if (apiKeyClient && bootGeminiApiKey === resolvedGeminiApiKey) {
     return apiKeyClient;
@@ -339,7 +289,6 @@ async function generateContent(
 
 router.post('/generateContent', requireAuth(async (req, res, userId) => {
   try {
-    await injectRagContextIfEnabled(req, userId);
     const response = await generateContent(req.body, getAuthorizationHeader(req), req);
     res.json(response);
   } catch (error: any) {
@@ -366,7 +315,6 @@ router.post('/generateContentStream', requireAuth(async (req, res, userId) => {
   try {
     const authHeader = getAuthorizationHeader(req);
     const parsed = parseModelSelection(req.body?.model);
-    await injectRagContextIfEnabled(req, userId);
 
     if (parsed.provider !== 'gemini') {
       if (!isSupportedProvider(parsed.provider)) {

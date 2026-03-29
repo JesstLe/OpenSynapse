@@ -414,7 +414,9 @@ router.post("/flashcards/:id/review", requireAuth(async (req, res, userId) => {
 
 router.get("/chat-sessions", requireAuth(async (req, res, userId) => {
   try {
+    console.log("[DEBUG] Getting chat sessions for user:", userId);
     const sessions = await chatRepo.session.findByUser(userId);
+    console.log("[DEBUG] Found sessions:", sessions.length, sessions.map(s => ({ id: s.id, title: s.title, userId: s.userId })));
     const sessionsWithMessages = await Promise.all(
       sessions.map(async (session) => {
         const messages = await chatRepo.message.findBySession(session.id);
@@ -430,6 +432,7 @@ router.get("/chat-sessions", requireAuth(async (req, res, userId) => {
         };
       })
     );
+    console.log("[DEBUG] Returning sessions with messages:", sessionsWithMessages.length);
     res.json(sessionsWithMessages);
   } catch (error) {
     console.error("Failed to list chat sessions:", error);

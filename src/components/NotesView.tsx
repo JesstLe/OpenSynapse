@@ -434,7 +434,14 @@ export default function NotesView({ notes, onDelete, onUpdateNote, initialSelect
                   <div className="prose dark:prose-invert max-w-none text-text-sub leading-loose prose-headings:text-text-main prose-strong:text-text-main prose-code:text-accent prose-code:bg-accent/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-secondary prose-pre:border prose-pre:border-border-main prose-pre:rounded-2xl prose-a:text-accent prose-a:no-underline hover:prose-a:underline">
                     <ReactMarkdown 
                       remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
+                      rehypePlugins={[[rehypeKatex, {
+                        macros: {
+                          '\\xlongequal': '\\stackrel\\text{#1}\\Longequal\\!\\!\\!\\!\\!\\!=',
+                          '\\Longequal': '\\Relbar',
+                        },
+                        strict: false,
+                        trust: true,
+                      }]]}
                     >
                       {selectedNote.content}
                     </ReactMarkdown>

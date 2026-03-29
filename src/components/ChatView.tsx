@@ -9,7 +9,7 @@ import { Send, Sparkles, Loader2, BrainCircuit, Image as ImageIcon, X, LayoutDas
 import { ChatMessage, Note, Flashcard, ChatSession, Persona } from '../types';
 import { PRESET_PERSONAS, DEFAULT_PERSONA_ID, getCSTutorPersona } from '../lib/personas';
 import { chatWithAI, chatWithAIStream, processConversation, BreakthroughConfig, startBreakthroughChat, startBreakthroughChatStream, deconstructDocument, deconstructUrl, deconstructScannedDocument, deconstructTOC, type StreamChunk } from '../services/gemini';
-import { cn } from '../lib/utils';
+import { cn, generateUUID } from '../lib/utils';
 import { AI_MODEL_OPTIONS, getModelOption, getPreferredTextModel, isKnownTextModel, setPreferredTextModel } from '../lib/aiModels';
 import ImportDialog from './ImportDialog';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -296,7 +296,7 @@ export default function ChatView({
     const hasRealConversation = messages.length > 1 || hasUserMessages;
 
     if (hasRealConversation) {
-      const sessionId = currentSessionId || crypto.randomUUID();
+      const sessionId = currentSessionId || generateUUID();
       const title = messages.find(m => m.role === 'user')?.text.slice(0, 30) || '新会话';
       await onSaveSession({
         id: sessionId,
@@ -305,6 +305,7 @@ export default function ChatView({
         updatedAt: Date.now(),
         userId: '',
         personaId: selectedPersonaId,
+        model: selectedModel,
       });
 
       setCurrentSessionId(null);
@@ -494,7 +495,7 @@ export default function ChatView({
 
       // 保存会话（thought 不持久化到 Firestore，节省空间）
       const finalMessages: ChatMessage[] = [...messagesToSend, { role: 'model', text: fullText }];
-      const sessionId = currentSessionId || crypto.randomUUID();
+      const sessionId = currentSessionId || generateUUID();
       if (!currentSessionId) setCurrentSessionId(sessionId);
       const title = finalMessages.find(m => m.role === 'user')?.text.slice(0, 30) || '新会话';
       await onSaveSession({
@@ -504,6 +505,7 @@ export default function ChatView({
         updatedAt: Date.now(),
         userId: '',
         personaId: selectedPersonaId,
+        model: selectedModel,
       });
     } catch (error: any) {
       if (controller.signal.aborted) return; // 用户主动停止，不显示错误
@@ -990,8 +992,8 @@ export default function ChatView({
             animate={{ opacity: 1, y: 0 }}
             key={i}
             className={cn(
-              "flex flex-col max-w-[85%]",
-              msg.role === 'user' ? "ml-auto items-end" : "items-start"
+              "flex flex-col",
+              msg.role === 'user' ? "ml-auto items-end max-w-[85%] md:max-w-[80%]" : "items-start max-w-[95%] md:max-w-[92%]"
             )}
           >
             {/* 思考过程折叠展示 */}
@@ -1037,9 +1039,13 @@ export default function ChatView({
                 </div>
               ) : (
                 <div className="markdown-body">
-                  <ReactMarkdown 
+                  <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkMath]}
-                    rehypePlugins={[rehypeKatex]}
+                    rehypePlugins={[[rehypeKatex, {
+                      strict: false,
+                      trust: true,
+                      throwOnError: false,
+                    }]]}
                   >
                     {msg.text || (isLoading && i === messages.length - 1 ? '' : '')}
                   </ReactMarkdown>

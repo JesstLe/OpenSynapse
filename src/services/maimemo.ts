@@ -1,4 +1,5 @@
 import { Flashcard } from '../types';
+import { generateUUID } from '../lib/utils';
 
 /**
  * MaiMemo (墨墨背单词) Spaced Repetition Algorithm
@@ -233,7 +234,7 @@ export function initializeCard(card: Partial<Flashcard>): Flashcard {
   const halflife = calStartHalflife(difficulty);
   
   return {
-    id: card.id || crypto.randomUUID(),
+    id: card.id || generateUUID(),
     noteId: card.noteId || '',
     question: card.question || '',
     answer: card.answer || '',

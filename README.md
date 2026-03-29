@@ -526,6 +526,46 @@ OPENSYNAPSE_CLI_MODEL=gemini-2.5-pro npx tsx scripts/cli.ts ./file.txt
 
 ---
 
+## 🚀 生产部署
+
+### 服务器配置
+
+- **服务器**: 阿里云 ECS (Ubuntu 24.04)
+- **进程管理**: PM2
+- **反向代理**: Nginx (端口 80 → 3000)
+- **数据库**: PostgreSQL 16
+
+### 一键部署
+
+```bash
+./deploy.sh
+```
+
+部署脚本会自动：
+1. 构建前端 (`npm run build`)
+2. 通过 rsync 同步文件到服务器
+3. 在服务器上运行 `npm install --production`
+4. 重启 PM2 进程
+
+### 环境要求
+
+- Node.js 18+
+- PostgreSQL 16
+- PM2 (`npm install -g pm2`)
+- Nginx (可选，用于反向代理)
+
+### 关键配置
+
+| 文件 | 说明 |
+|------|------|
+| `deploy.sh` | 部署脚本 |
+| `ecosystem.config.cjs` | PM2 配置 |
+| `src/auth/server.ts` | 认证配置（trustedOrigins, trustedProxies） |
+
+详细部署指南请参考 [docs/DEPLOYMENT_GUIDE.md](./docs/DEPLOYMENT_GUIDE.md)
+
+---
+
 ## 🤝 贡献指南
 
 我们欢迎所有形式的贡献！

@@ -9,3 +9,13 @@ coverage/
 .claude/
 .opencode/
 .github/
+
+# Deployment keys and secrets
+*.pem
+*.key
+opensynapse-deploy.tar.gz
+
+# Temporary deployment files
+nginx-opensynapse.conf
+setup-nginx.sh
+deploy-opensynapse.sh
