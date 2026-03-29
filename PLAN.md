@@ -44,3 +44,12 @@
 - [x] **知识提炼模型配置**：用户可独立选择结构化输出模型（支持所有提供商）。
 - [x] **非 Gemini 提供商兼容**：修复 JSON Schema 转换、embedding 降级、safeJsonParse 等问题。
 - [x] **CLI 工具增强**：支持多提供商模型切换、批量导入、认证管理。
+
+## 阶段 7：自托管架构迁移 (Self-Hosted Architecture) - [已完成]
+- [x] **Firebase 迁移**：从 Firebase Auth + Firestore 迁移到自托管架构。
+- [x] **better-auth 集成**：使用 better-auth 实现多提供商认证（Google、GitHub、Discord）。
+- [x] **PostgreSQL 数据库**：使用 PostgreSQL 替代 Firestore，完整数据掌控。
+- [x] **Chroma 向量数据库**：使用本地 Chroma 替代 Firebase Vector Search。
+- [x] **Drizzle ORM**：使用 Drizzle ORM 进行数据库操作。
+- [x] **邮箱/密码认证**：添加邮箱/密码注册和登录功能。
+- [x] **Schema 修复**：修复 Drizzle schema 以兼容 better-auth（verifications 表、session ipAddress/userAgent 列）。
