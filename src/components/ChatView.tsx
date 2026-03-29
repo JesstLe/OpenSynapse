@@ -333,9 +333,17 @@ export default function ChatView({
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // 限制图片大小为 5MB
+      if (file.size > 5 * 1024 * 1024) {
+        alert('图片大小超过 5MB 限制，请选择更小的图片。');
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setSelectedImage(reader.result as string);
+      };
+      reader.onerror = () => {
+        alert('图片读取失败，请重试。');
       };
       reader.readAsDataURL(file);
     }
@@ -344,6 +352,11 @@ export default function ChatView({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // 限制文档大小为 20MB
+      if (file.size > 20 * 1024 * 1024) {
+        alert('文档大小超过 20MB 限制，请选择更小的文档。');
+        return;
+      }
       setSelectedFile(file);
     }
   };
