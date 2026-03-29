@@ -1,5 +1,6 @@
 import { Note, Flashcard, ChatMessage, Persona } from "../types";
 import {
+  getModelOption,
   getPreferredEmbeddingModel,
   getPreferredStructuredModel,
   getPreferredTextModel,
@@ -165,6 +166,77 @@ function buildContentParts(messages: ChatMessage[]) {
   });
 }
 
+/**
+ * 调用智谱 OCR API 提取图片中的文字
+ * @param imageBase64 - base64 编码的图片
+ * @returns 提取的文字内容
+ */
+async function callZhipuOcr(imageBase64: string): Promise<string> {
+  try {
+    const response = await fetch('/api/ai/ocr/zhipu', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imageBase64,
+        tool_type: 'hand_write',
+        language_type: 'CHN_ENG',
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'OCR 请求失败');
+    }
+
+    const result = await response.json();
+    
+    if (result.status === 'succeeded' && result.words_result) {
+      return result.words_result.map((item: any) => item.words).join('\n');
+    }
+    
+    return '';
+  } catch (error) {
+    console.error('[OCR] 提取失败:', error);
+    return '';
+  }
+}
+
+/**
+ * 对于非 vision 模型，使用 OCR 提取图片内容并附加到消息中
+ */
+async function extractImagesWithOcr(messages: ChatMessage[], modelId: string): Promise<ChatMessage[]> {
+  const parsed = parseModelSelection(modelId);
+  
+  // 目前仅支持智谱的 OCR
+  if (parsed.provider !== 'zhipu') {
+    return messages;
+  }
+
+  const processedMessages: ChatMessage[] = [];
+  
+  for (const message of messages) {
+    if (message.role === 'user' && message.image) {
+      const ocrText = await callZhipuOcr(message.image);
+      
+      if (ocrText) {
+        // 将 OCR 结果附加到原文本中
+        processedMessages.push({
+          ...message,
+          text: `${message.text}\n\n[图片内容]\n${ocrText}`,
+          image: undefined, // 移除图片，只保留提取的文本
+        });
+      } else {
+        // OCR 失败，保留原消息
+        processedMessages.push(message);
+      }
+    } else {
+      processedMessages.push(message);
+    }
+  }
+  
+  return processedMessages;
+}
+
 // ─── 非流式聊天（保留用于兼容和 JSON 输出场景） ───
 
 export async function chatWithAI(messages: ChatMessage[], allNotes: Note[], persona?: Persona) {
@@ -218,7 +290,14 @@ export async function* chatWithAIStream(
   }
 
   // 历史裁剪：只保留最近 12 条消息，避免上下文过长导致超时
-  const recentMessages = messages.slice(-12);
+  let recentMessages = messages.slice(-12);
+  
+  // 对于非 vision 模型，尝试使用 OCR 提取图片内容
+  const modelOption = getModelOption(modelId);
+  if (!modelOption?.supportsVision) {
+    recentMessages = await extractImagesWithOcr(recentMessages, modelId);
+  }
+  
   const contents = buildContentParts(recentMessages);
   
   // 使用选定的人格，默认为预设人格（数学导师）

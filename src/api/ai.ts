@@ -17,7 +17,7 @@ import {
   loadCredentials,
   resolveOAuthClientConfig,
 } from '../lib/oauth.js';
-import { getApiKeyConfigForServer } from '../services/userApiKeyService.server.js';
+import { getApiKeyConfigForServer, getApiKeyForServer } from '../services/userApiKeyService.server.js';
 import { auth } from '../auth/server.js';
 import { requireAuth } from './auth-middleware.js';
 
@@ -435,6 +435,56 @@ router.post('/embedContent', requireAuth(async (req, res, userId) => {
   } catch (error: any) {
     console.error('[AI] Embed Content Error:', error);
     res.status(500).json({ error: error.message || 'Error generating embedding' });
+  }
+}));
+
+// ─── 智谱 OCR 服务代理 ───
+router.post('/ocr/zhipu', requireAuth(async (req, res, userId) => {
+  try {
+    const { imageBase64, tool_type = 'hand_write', language_type = 'CHN_ENG' } = req.body;
+    
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'Missing imageBase64' });
+    }
+
+    const apiKey = await getApiKeyForServer(userId, 'zhipu') || process.env.ZHIPU_API_KEY;
+    
+    if (!apiKey) {
+      return res.status(400).json({ error: 'ZHIPU_API_KEY not configured' });
+    }
+
+    // 将 base64 转换为 buffer
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+    
+    // 创建 FormData
+    const FormData = require('form-data');
+    const formData = new FormData();
+    formData.append('file', imageBuffer, { filename: 'image.png', contentType: 'image/png' });
+    formData.append('tool_type', tool_type);
+    formData.append('language_type', language_type);
+    formData.append('probability', 'false');
+
+    // 调用智谱 OCR API
+    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/files/ocr', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        ...formData.getHeaders(),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OCR API error: ${response.status} ${errorText}`);
+    }
+
+    const result = await response.json();
+    res.json(result);
+  } catch (error: any) {
+    console.error('[AI] Zhipu OCR Error:', error);
+    res.status(500).json({ error: error.message || 'OCR processing failed' });
   }
 }));
 
