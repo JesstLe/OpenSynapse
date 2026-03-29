@@ -1,6 +1,6 @@
 # OpenSynapse (突触) - AGENTS.md
 
-**Updated:** 2026-03-29  
+**Updated:** 2026-03-29 (Auth fixes: email/password registration, schema fixes)  
 **Branch:** main
 
 ## Overview
@@ -179,11 +179,17 @@ OAuth 本地回调地址：
 
 ### Multi-Provider Authentication
 
-OpenSynapse uses better-auth for authentication with support for social login providers:
+OpenSynapse uses better-auth for authentication with support for multiple login methods:
 
+**Social Login:**
 - **Google** - OAuth 2.0
 - **GitHub** - OAuth 2.0
 - **Discord** - OAuth 2.0
+
+**Email/Password:**
+- **Registration** - Users can create accounts with email and password
+- **Login** - Direct email/password authentication
+- **Password Requirements** - Minimum 8 characters, maximum 128 characters
 
 ### Architecture
 
