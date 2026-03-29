@@ -15,6 +15,13 @@
       "when": 1774728215186,
       "tag": "0001_swift_magus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774783490778,
+      "tag": "0002_add_session_ip_columns",
+      "breakpoints": true
     }
   ]
 }

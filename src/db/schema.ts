@@ -15,6 +15,8 @@ export const sessions = pgTable('session', {
   userId: text('user_id').notNull().references(() => users.id),
   token: text('token').notNull().unique(),
   expiresAt: timestamp('expires_at').notNull(),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -35,7 +37,7 @@ export const accounts = pgTable('account', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
-export const verification = pgTable('verification', {
+export const verifications = pgTable('verification', {
   id: text('id').primaryKey(),
   identifier: text('identifier').notNull(),
   value: text('value').notNull(),
