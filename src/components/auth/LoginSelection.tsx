@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Chrome, Loader2, Sparkles, Lock, ArrowRight } from 'lucide-react';
+import { Chrome, Loader2, Sparkles, Lock, ArrowRight, Mail, Eye, EyeOff, UserPlus } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { authClient } from '../../auth/client';
 
 interface LoginSelectionProps {
   onSocialLogin?: (provider: LoginProvider) => Promise<void>;
@@ -24,6 +25,17 @@ interface ProviderConfig {
 
 export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSelectionProps) {
   const [loadingProvider, setLoadingProvider] = useState<LoginProvider | null>(null);
+
+  // Registration state
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
   const providers: ProviderConfig[] = [
     {
@@ -93,6 +105,58 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
     }
   };
 
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegisterError(null);
+
+    if (!registerEmail || !registerPassword || !registerConfirmPassword) {
+      setRegisterError('请填写所有字段');
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(registerEmail)) {
+      setRegisterError('请输入有效的邮箱地址');
+      return;
+    }
+
+    if (registerPassword.length < 8) {
+      setRegisterError('密码至少需要 8 个字符');
+      return;
+    }
+
+    if (registerPassword !== registerConfirmPassword) {
+      setRegisterError('两次输入的密码不一致');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await authClient.signUp.email({
+        email: registerEmail,
+        password: registerPassword,
+        name: registerEmail.split('@')[0],
+      });
+
+      setRegistrationSuccess(true);
+      setRegisterEmail('');
+      setRegisterPassword('');
+      setRegisterConfirmPassword('');
+      setTimeout(() => {
+        setIsRegistering(false);
+        setRegistrationSuccess(false);
+      }, 2000);
+    } catch (error) {
+      const err = error as { message?: string; code?: string };
+      if (err.code === 'EMAIL_ALREADY_IN_USE' || err.message?.includes('already')) {
+        setRegisterError('该邮箱已被注册，请直接登录或使用其他邮箱');
+      } else {
+        setRegisterError(err.message || '注册失败，请稍后重试');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-primary flex items-center justify-center p-4 relative overflow-hidden">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -143,11 +207,13 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
                 </motion.div>
               </div>
 
-              <h1 className="text-3xl font-black tracking-tight text-text-main mb-2">
-                欢迎回来
-              </h1>
+              <AnimatePresence mode="wait">
+                <h1 className="text-3xl font-black tracking-tight text-text-main mb-2">
+                  {isRegistering ? '创建账号' : '欢迎回来'}
+                </h1>
+              </AnimatePresence>
               <p className="text-text-sub text-sm leading-relaxed">
-                选择一种方式登录 OpenSynapse
+                {isRegistering ? '填写以下信息注册新账号' : '选择一种方式登录 OpenSynapse'}
               </p>
             </motion.div>
 
@@ -222,15 +288,141 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
               </AnimatePresence>
             </div>
 
-            <div className="relative my-8">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border-main" />
-              </div>
-              <div className="relative flex justify-center">
-                <span className="bg-card px-4 text-xs text-text-muted uppercase tracking-widest font-bold">
-                  安全登录
-                </span>
-              </div>
+            <AnimatePresence mode="wait">
+              {!isRegistering && (
+                <motion.button
+                  key="register-toggle"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  onClick={() => {
+                    setIsRegistering(true);
+                    setRegisterError(null);
+                  }}
+                  className="w-full py-3 text-sm text-text-muted hover:text-accent transition-colors flex items-center justify-center gap-2"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>没有账号？注册一个</span>
+                </motion.button>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {isRegistering && (
+                <motion.div
+                  key="register-form"
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-4"
+                >
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
+                    <input
+                      type="email"
+                      value={registerEmail}
+                      onChange={(e) => {
+                        setRegisterEmail(e.target.value);
+                        setRegisterError(null);
+                      }}
+                      className="w-full pl-12 pr-4 py-3 bg-background border border-border-main rounded-lg text-text-primary focus:outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={registerPassword}
+                      onChange={(e) => {
+                        setRegisterPassword(e.target.value);
+                        setRegisterError(null);
+                      }}
+                      className="w-full pl-12 pr-12 py-3 bg-background border border-border-main rounded-lg text-text-primary focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={registerConfirmPassword}
+                      onChange={(e) => {
+                        setRegisterConfirmPassword(e.target.value);
+                        setRegisterError(null);
+                      }}
+                      className="w-full pl-12 pr-12 py-3 bg-background border border-border-main rounded-lg text-text-primary focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+
+                  {registerError && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm"
+                    >
+                      {registerError === "EMAIL_ALREADY_IN_USE" ? "该邮箱已被注册，请直接��录" : registerError}
+                    </motion.div>
+                  )}
+
+                  {registrationSuccess && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      className="p-3 bg-success/10 border border-success/30 rounded-lg text-success text-sm"
+                    >
+                      账号创建成功！即将跳转到首页...
+                    </motion.div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsRegistering(false);
+                        setRegisterError(null);
+                        setRegisterEmail("");
+                        setRegisterPassword("");
+                        setRegisterConfirmPassword("");
+                      }}
+                      className="flex-1 py-3 px-4 border border-border-main rounded-lg text-text-primary hover:bg-background"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleRegister(e as any)}
+                      disabled={isSubmitting || registrationSuccess}
+                      className="flex-1 py-3 px-4 bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50"
+                    >
+                      {isSubmitting ? "注册中..." : "创建账号"}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="relative flex justify-center">
+              <span className="bg-card px-4 text-xs text-text-muted uppercase tracking-widest font-bold">
+                安全登录
+              </span>
             </div>
 
             <motion.div
