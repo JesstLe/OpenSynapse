@@ -50,6 +50,27 @@ interface BetterAuthUser {
   updatedAt?: Date;
 }
 
+function generateUserAvatarColor(name: string): string {
+  const colors = [
+    '#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981',
+    '#EF4444', '#6366F1', '#14B8A6', '#F97316', '#84CC16'
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
+
+function getUserInitials(name: string): string {
+  if (!name || name === 'U') return 'U';
+  const parts = name.split(/[\s@._-]+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.charAt(0).toUpperCase();
+}
+
 function sanitizeChatSession(session: ChatSession, userId: string) {
   const base: Record<string, any> = {
     id: session.id,
@@ -146,12 +167,43 @@ export default function App() {
   }, [isDarkMode]);
 
   useEffect(() => {
+    let cancelled = false;
+
     const checkAuth = async () => {
-      const { data } = await authClient.getSession();
-      setUser(data?.user ?? null);
-      setIsAuthReady(true);
+      try {
+        const { data } = await authClient.getSession();
+        if (!cancelled) {
+          setUser(data?.user ?? null);
+          setIsAuthReady(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setUser(null);
+          setIsAuthReady(true);
+        }
+      }
     };
     checkAuth();
+
+    const interval = setInterval(() => {
+      authClient.getSession().then(({ data }) => {
+        if (cancelled) return;
+        const newUser = data?.user ?? null;
+        setUser(prev => {
+          if (JSON.stringify(prev) !== JSON.stringify(newUser)) {
+            return newUser as BetterAuthUser | null;
+          }
+          return prev;
+        });
+      }).catch(() => {
+        // 服务器不可达时静默忽略，等待下次轮询重试
+      });
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -520,8 +572,14 @@ export default function App() {
                 alt={user.name || ''} 
               />
             ) : (
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-300 border border-border-main bg-accent/20 text-accent">
-                {isUsingDevAuthBypass ? 'DEV' : (user?.name || 'U').charAt(0).toUpperCase()}
+              <div 
+                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-300 border border-border-main"
+                style={{
+                  backgroundColor: generateUserAvatarColor(user?.name || user?.email || 'U'),
+                  color: '#ffffff'
+                }}
+              >
+                {isUsingDevAuthBypass ? 'DEV' : getUserInitials(user?.name || user?.email || 'U')}
               </div>
             )}
             <div className="flex-1 min-w-0">
