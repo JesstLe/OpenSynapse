@@ -42,12 +42,31 @@ export function schedule(card: Flashcard, rating: Rating): Flashcard {
   newCard.difficulty = d;
   newCard.lastReview = now;
   newCard.repetitions += 1;
-  
-  const interval = Math.max(1, Math.round(s * Math.log(0.9) / Math.log(0.9))); // Simplified interval
-  // Actually interval = s * (1/0.9 - 1) * 9 is a common approximation for 90% retention
-  const actualInterval = rating === Rating.Easy ? s * 1.3 : s;
-  
-  newCard.nextReview = now + Math.max(1, Math.round(actualInterval)) * 24 * 60 * 60 * 1000;
+
+  // 计算复习间隔（天数）
+  // 对于新卡片，使用更合理的初始间隔
+  // Again: 10分钟后复习, Hard: 1天后, Good: 3天后, Easy: 7天后
+  let intervalDays: number;
+  if (card.state === 0) {
+    // 新卡片的初始间隔（更符合实际学习场景）
+    const initialIntervals = {
+      [Rating.Again]: 0.01,  // 10分钟（约0.01天）
+      [Rating.Hard]: 1,      // 1天
+      [Rating.Good]: 3,      // 3天
+      [Rating.Easy]: 7,      // 7天
+    };
+    intervalDays = initialIntervals[rating];
+  } else {
+    // 已学习过的卡片，基于稳定性计算
+    // 90%保留率对应的间隔 ≈ stability
+    intervalDays = rating === Rating.Easy ? s * 1.3 : s;
+    // 确保最小间隔为1天（Again除外）
+    if (rating !== Rating.Again) {
+      intervalDays = Math.max(1, intervalDays);
+    }
+  }
+
+  newCard.nextReview = now + intervalDays * 24 * 60 * 60 * 1000;
 
   return newCard;
 }
@@ -59,8 +78,13 @@ export function predictNextReview(card: Flashcard, rating: Rating): number {
 
 export function getIntervalString(nextReview: number): string {
   const diff = nextReview - Date.now();
+  const minutes = Math.round(diff / (1000 * 60));
+  const hours = Math.round(diff / (1000 * 60 * 60));
   const days = Math.round(diff / (1000 * 60 * 60 * 24));
-  if (days <= 0) return "1天内";
+
+  if (minutes <= 0) return "立即";
+  if (minutes < 60) return `${minutes}分钟后`;
+  if (hours < 24) return `${hours}小时后`;
   if (days < 30) return `${days}天后`;
   if (days < 365) return `${Math.round(days / 30)}个月后`;
   return `${Math.round(days / 365)}年后`;
