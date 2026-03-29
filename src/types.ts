@@ -23,6 +23,8 @@ export interface Flashcard {
   repetitions: number;
   state: number; // 0: New, 1: Learning, 2: Review, 3: Relearning
   userId: string;
+  halflife?: number; // MaiMemo algorithm: half-life in days
+  createdAt?: number;
 }
 
 export interface ChatMessage {

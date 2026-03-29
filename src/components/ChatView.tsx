@@ -409,8 +409,9 @@ export default function ChatView({
       let fullThought = '';
       const stream = chatWithAIStream(
         messagesToSend,
-        notes,
+        userId,
         currentPersona,
+        undefined,
         controller.signal
       );
 

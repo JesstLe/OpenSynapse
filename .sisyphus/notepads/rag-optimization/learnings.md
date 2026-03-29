@@ -1,0 +1,3 @@
+- 2026-03-29: 新增 `generateEmbeddingsServer`，统一服务端 embedding 入口，支持 Gemini SDK 与非 Gemini (`embedContentWithApiKeyProvider`) 双路径，并在失败时返回 `{ degraded: true }` 而非抛错，便于 RAG 优雅降级。
+- 2026-03-29: `vectorStore` 扩展 `healthCheck/searchWithFilter/batchUpsert` 后，可在检索前先探活 Chroma；RAG 可在向量库不可用时自动回退 PostgreSQL 关键词检索。
+- 2026-03-29: `hybridSearch` 使用 RRF 融合（`weight * 1/(rank+1)`）可将向量排序与关键词排序稳定合并，结合 `minScore/maxResults` 控制上下文长度，避免提示词注入过载。

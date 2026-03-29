@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Check, X, RotateCcw, Brain, ChevronRight, Trophy, Network } from 'lucide-react';
 import { Flashcard, Note } from '../types';
 import { cn } from '../lib/utils';
-import { schedule, Rating, predictNextReview, getIntervalString } from '../services/fsrs';
+import { schedule, Rating, predictNextReview, getIntervalString } from '../services/maimemo';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -38,6 +38,7 @@ export default function ReviewView({ flashcards, notes, onBackToDashboard, onRev
     if (currentIndex >= dueCards.length - 1) {
       setIsFinished(true);
     } else {
+      setCurrentIndex(prev => prev + 1);
       setIsFlipped(false);
     }
   };

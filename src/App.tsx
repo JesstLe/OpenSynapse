@@ -24,7 +24,7 @@ import {
 import { Note, Flashcard, ChatMessage, ChatSession, Persona } from './types';
 import { chatWithAI, processConversation, findSemanticLinks, generateEmbedding, BreakthroughConfig, startBreakthroughChat } from './services/gemini';
 import { cn } from './lib/utils';
-import { schedule, Rating } from './services/fsrs';
+import { schedule, Rating } from './services/maimemo';
 import { authClient } from './auth/client';
 
 // Components
@@ -283,8 +283,16 @@ export default function App() {
         return;
       }
 
+      let persistedNote: Note = note;
       try {
-        await notesApi.create(sanitizeNoteForStorage(note) as any);
+        const saved = await notesApi.create(sanitizeNoteForStorage(note) as any);
+        persistedNote = {
+          ...note,
+          ...saved,
+          embedding: Array.isArray((saved as any).embedding)
+            ? (saved as any).embedding
+            : note.embedding,
+        };
       } catch (error) {
         console.error('Failed to save note:', error);
       }
@@ -297,7 +305,7 @@ export default function App() {
         }
       }
 
-      setNotes(prev => [note, ...prev]);
+      setNotes(prev => [persistedNote, ...prev.filter(existing => existing.id !== persistedNote.id)]);
       setFlashcards(prev => [...cards, ...prev]);
       setActiveView('notes');
     } catch (error) {
@@ -333,8 +341,15 @@ export default function App() {
       return;
     }
     try {
-      await notesApi.update(updatedNote.id, sanitizeNoteForStorage(updatedNote));
-      setNotes(prev => prev.map(note => note.id === updatedNote.id ? updatedNote : note));
+      const persisted = await notesApi.update(updatedNote.id, sanitizeNoteForStorage(updatedNote));
+      const mergedNote: Note = {
+        ...updatedNote,
+        ...persisted,
+        embedding: Array.isArray((persisted as any).embedding)
+          ? (persisted as any).embedding
+          : updatedNote.embedding,
+      };
+      setNotes(prev => prev.map(note => note.id === mergedNote.id ? mergedNote : note));
     } catch (error) {
       console.error("Failed to update note:", error);
     }
@@ -505,8 +520,8 @@ export default function App() {
                 alt={user.name || ''} 
               />
             ) : (
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-300 border border-border-main bg-tertiary text-text-muted">
-                {isUsingDevAuthBypass ? 'DEV' : '?'}
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-300 border border-border-main bg-accent/20 text-accent">
+                {isUsingDevAuthBypass ? 'DEV' : (user?.name || 'U').charAt(0).toUpperCase()}
               </div>
             )}
             <div className="flex-1 min-w-0">

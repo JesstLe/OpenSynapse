@@ -9,6 +9,8 @@ import { auth } from "../auth/server";
 import { db } from "../db";
 import { accounts } from "../db/schema";
 import { schedule, Rating } from "../services/fsrs";
+import { vectorStore } from "../vector/chroma";
+import { generateEmbeddingsServer } from "../services/embeddingService";
 
 const router = Router();
 
@@ -26,6 +28,102 @@ function mapNoteToFrontend(note: any) {
     createdAt: toFrontendTimestamp(note.createdAt),
     updatedAt: toFrontendTimestamp(note.updatedAt),
   };
+}
+
+function buildNoteEmbeddingText(note: {
+  title?: string | null;
+  summary?: string | null;
+  content?: string | null;
+  tags?: string[] | null;
+}): string {
+  const tagsText = Array.isArray(note.tags) ? note.tags.join(' ') : '';
+  return [note.title || '', note.summary || '', note.content || '', tagsText]
+    .join('\n')
+    .trim();
+}
+
+function buildNoteDocument(note: {
+  title?: string | null;
+  summary?: string | null;
+  content?: string | null;
+  tags?: string[] | null;
+}): string {
+  const tagsText = Array.isArray(note.tags) && note.tags.length > 0
+    ? `Tags: ${note.tags.join(', ')}`
+    : '';
+
+  return [
+    note.title ? `Title: ${note.title}` : '',
+    note.summary ? `Summary: ${note.summary}` : '',
+    note.content ? `Content: ${note.content}` : '',
+    tagsText,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+}
+
+async function syncNoteToChroma(userId: string, note: any): Promise<void> {
+  const health = await vectorStore.healthCheck();
+  if (!health.healthy) {
+    console.warn('[Data API] Chroma unavailable, skip note sync:', health.error);
+    return;
+  }
+
+  let embedding = Array.isArray(note.embedding) && note.embedding.length > 0
+    ? note.embedding
+    : null;
+
+  if (!embedding) {
+    const embeddingText = buildNoteEmbeddingText(note);
+    if (!embeddingText) {
+      console.warn('[Data API] Empty note text, skip note embedding sync:', note.id);
+      return;
+    }
+
+    const generated = await generateEmbeddingsServer([embeddingText]);
+    if (generated.degraded || generated.values.length === 0) {
+      if (generated.reason) {
+        console.warn('[Data API] Failed to generate note embedding, wait next sync opportunity:', generated.reason);
+      } else {
+        console.warn('[Data API] Failed to generate note embedding, wait next sync opportunity');
+      }
+      return;
+    }
+
+    embedding = generated.values;
+    await noteRepo.update(note.id, { embedding });
+    note.embedding = embedding;
+  }
+
+  const document = buildNoteDocument(note);
+  if (!document) {
+    console.warn('[Data API] Empty note document, skip Chroma upsert:', note.id);
+    return;
+  }
+
+  await vectorStore.batchUpsert(userId, [
+    {
+      noteId: note.id,
+      content: document,
+      embedding,
+      metadata: {
+        title: note.title || '',
+        summary: note.summary || '',
+        source: note.source || '',
+      },
+    },
+  ]);
+}
+
+async function deleteNoteFromChroma(userId: string, noteId: string): Promise<void> {
+  const health = await vectorStore.healthCheck();
+  if (!health.healthy) {
+    console.warn('[Data API] Chroma unavailable, skip note deletion sync:', health.error);
+    return;
+  }
+
+  await vectorStore.deleteNote(userId, noteId);
 }
 
 function mapFlashcardToFrontend(card: any) {
@@ -69,7 +167,7 @@ router.get("/notes", requireAuth(async (req, res, userId) => {
 
 router.post("/notes", requireAuth(async (req, res, userId) => {
   try {
-    const { title, content, summary, tags, relatedIds, codeSnippet, source, createdAt, updatedAt } = req.body;
+    const { title, content, summary, tags, relatedIds, codeSnippet, source, embedding, createdAt, updatedAt } = req.body;
     const note = await noteRepo.create({
       id: crypto.randomUUID(),
       title,
@@ -79,10 +177,18 @@ router.post("/notes", requireAuth(async (req, res, userId) => {
       relatedIds,
       codeSnippet,
       source,
+      embedding,
       userId,
       createdAt: toDbDate(createdAt),
       updatedAt: updatedAt !== undefined ? toDbDate(updatedAt) : new Date(),
     });
+
+    try {
+      await syncNoteToChroma(userId, note);
+    } catch (syncError) {
+      console.warn('[Data API] Failed to sync created note to Chroma:', syncError);
+    }
+
     res.json(mapNoteToFrontend(note));
   } catch (error) {
     console.error("Failed to create note:", error);
@@ -99,9 +205,16 @@ router.put("/notes/:id", requireAuth(async (req, res, userId) => {
     if (existing.userId !== userId) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const { title, content, summary, tags, relatedIds, codeSnippet, source } = req.body;
-    const updateData = { title, content, summary, tags, relatedIds, codeSnippet, source };
+    const { title, content, summary, tags, relatedIds, codeSnippet, source, embedding } = req.body;
+    const updateData = { title, content, summary, tags, relatedIds, codeSnippet, source, embedding };
     const note = await noteRepo.update(req.params.id, updateData);
+
+    try {
+      await syncNoteToChroma(userId, note);
+    } catch (syncError) {
+      console.warn('[Data API] Failed to sync updated note to Chroma:', syncError);
+    }
+
     res.json(mapNoteToFrontend(note));
   } catch (error) {
     console.error("Failed to update note:", error);
@@ -119,10 +232,35 @@ router.delete("/notes/:id", requireAuth(async (req, res, userId) => {
       return res.status(403).json({ error: "Forbidden" });
     }
     await noteRepo.delete(req.params.id);
+
+    try {
+      await deleteNoteFromChroma(userId, req.params.id);
+    } catch (syncError) {
+      console.warn('[Data API] Failed to delete note from Chroma:', syncError);
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error("Failed to delete note:", error);
     res.status(500).json({ error: "Failed to delete note" });
+  }
+}));
+
+router.post("/notes/:id/sync", requireAuth(async (req, res, userId) => {
+  try {
+    const note = await noteRepo.findById(req.params.id);
+    if (!note) {
+      return res.status(404).json({ error: "Note not found" });
+    }
+    if (note.userId !== userId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    await syncNoteToChroma(userId, note);
+    res.json({ success: true });
+  } catch (error) {
+    console.warn('[Data API] Failed to sync note to Chroma:', error);
+    res.status(500).json({ error: "Failed to sync note to Chroma" });
   }
 }));
 

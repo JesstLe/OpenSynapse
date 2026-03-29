@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Chrome, Loader2, Sparkles, Lock, ArrowRight, Mail, Eye, EyeOff, UserPlus } from 'lucide-react';
+import { Chrome, Loader2, Sparkles, Lock, ArrowRight, Mail, Eye, EyeOff, UserPlus, LogIn } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { authClient } from '../../auth/client';
 
@@ -26,7 +26,6 @@ interface ProviderConfig {
 export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSelectionProps) {
   const [loadingProvider, setLoadingProvider] = useState<LoginProvider | null>(null);
 
-  // Registration state
   const [isRegistering, setIsRegistering] = useState(false);
   const [registerEmail, setRegisterEmail] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
@@ -35,7 +34,12 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [registrationSuccess, setRegistrationSuccess] = useState(false);
+
+  const [showEmailLogin, setShowEmailLogin] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
 
   const providers: ProviderConfig[] = [
     {
@@ -137,14 +141,10 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
         name: registerEmail.split('@')[0],
       });
 
-      setRegistrationSuccess(true);
-      setRegisterEmail('');
-      setRegisterPassword('');
-      setRegisterConfirmPassword('');
-      setTimeout(() => {
-        setIsRegistering(false);
-        setRegistrationSuccess(false);
-      }, 2000);
+      await authClient.signIn.email({
+        email: registerEmail,
+        password: registerPassword,
+      });
     } catch (error) {
       const err = error as { message?: string; code?: string };
       if (err.code === 'EMAIL_ALREADY_IN_USE' || err.message?.includes('already')) {
@@ -156,6 +156,31 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
       setIsSubmitting(false);
     }
   };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+
+    if (!loginEmail || !loginPassword) {
+      setLoginError('请输入邮箱和密码');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await authClient.signIn.email({
+        email: loginEmail,
+        password: loginPassword,
+      });
+    } catch (error) {
+      const err = error as { message?: string };
+      setLoginError(err.message || '登录失败，请检查邮箱和密码');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isFormMode = isRegistering || showEmailLogin;
 
   return (
     <div className="min-h-screen bg-primary flex items-center justify-center p-4 relative overflow-hidden">
@@ -208,18 +233,24 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
               </div>
 
               <AnimatePresence mode="wait">
-                <h1 className="text-3xl font-black tracking-tight text-text-main mb-2">
+                <motion.h1
+                  key={isRegistering ? 'register' : showEmailLogin ? 'email-login' : 'welcome'}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="text-3xl font-black tracking-tight text-text-main mb-2"
+                >
                   {isRegistering ? '创建账号' : '欢迎回来'}
-                </h1>
+                </motion.h1>
               </AnimatePresence>
               <p className="text-text-sub text-sm leading-relaxed">
-                {isRegistering ? '填写以下信息注册新账号' : '选择一种方式登录 OpenSynapse'}
+                {isRegistering ? '填写以下信息注册新账号' : showEmailLogin ? '使用邮箱和密码登录' : '选择一种方式登录 OpenSynapse'}
               </p>
             </motion.div>
 
             <div className="space-y-3">
               <AnimatePresence mode="wait">
-                {providers.map((provider, index) => (
+                {!isFormMode && providers.map((provider, index) => (
                   <motion.button
                     key={provider.id}
                     initial={{ opacity: 0, x: -20 }}
@@ -288,23 +319,128 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
               </AnimatePresence>
             </div>
 
+            {!isFormMode && (
+              <div className="relative flex items-center my-4">
+                <div className="flex-1 h-px bg-border-main" />
+                <span className="px-3 text-xs text-text-muted">或</span>
+                <div className="flex-1 h-px bg-border-main" />
+              </div>
+            )}
+
             <AnimatePresence mode="wait">
-              {!isRegistering && (
-                <motion.button
-                  key="register-toggle"
+              {!isFormMode && (
+                <motion.div
+                  key="login-options"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.2 }}
-                  onClick={() => {
-                    setIsRegistering(true);
-                    setRegisterError(null);
-                  }}
-                  className="w-full py-3 text-sm text-text-muted hover:text-accent transition-colors flex items-center justify-center gap-2"
+                  className="space-y-2"
                 >
-                  <UserPlus className="w-4 h-4" />
-                  <span>没有账号？注册一个</span>
-                </motion.button>
+                  <button
+                    onClick={() => {
+                      setShowEmailLogin(true);
+                      setLoginError(null);
+                    }}
+                    className="w-full py-3 text-sm text-text-muted hover:text-accent transition-colors flex items-center justify-center gap-2 border border-border-main rounded-xl hover:border-accent/30"
+                  >
+                    <Mail className="w-4 h-4" />
+                    <span>使用邮箱密码登录</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsRegistering(true);
+                      setRegisterError(null);
+                    }}
+                    className="w-full py-3 text-sm text-text-muted hover:text-accent transition-colors flex items-center justify-center gap-2"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>没有账号？注册一个</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {showEmailLogin && !isRegistering && (
+                <motion.div
+                  key="email-login-form"
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-4"
+                >
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
+                    <input
+                      type="email"
+                      placeholder="邮箱地址"
+                      value={loginEmail}
+                      onChange={(e) => {
+                        setLoginEmail(e.target.value);
+                        setLoginError(null);
+                      }}
+                      className="w-full pl-12 pr-4 py-3 bg-background border border-border-main rounded-lg text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:border-accent"
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
+                    <input
+                      type={showLoginPassword ? "text" : "password"}
+                      placeholder="密码"
+                      value={loginPassword}
+                      onChange={(e) => {
+                        setLoginPassword(e.target.value);
+                        setLoginError(null);
+                      }}
+                      className="w-full pl-12 pr-12 py-3 bg-background border border-border-main rounded-lg text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted"
+                    >
+                      {showLoginPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+
+                  {loginError && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm"
+                    >
+                      {loginError}
+                    </motion.div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowEmailLogin(false);
+                        setLoginError(null);
+                        setLoginEmail('');
+                        setLoginPassword('');
+                      }}
+                      className="flex-1 py-3 px-4 border border-border-main rounded-lg text-text-primary hover:bg-background"
+                    >
+                      返回
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleEmailLogin(e as any)}
+                      disabled={isSubmitting}
+                      className="flex-1 py-3 px-4 bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
+                      {isSubmitting ? "登录中..." : "登录"}
+                    </button>
+                  </div>
+                </motion.div>
               )}
             </AnimatePresence>
 
@@ -322,12 +458,13 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
                     <input
                       type="email"
+                      placeholder="邮箱地址"
                       value={registerEmail}
                       onChange={(e) => {
                         setRegisterEmail(e.target.value);
                         setRegisterError(null);
                       }}
-                      className="w-full pl-12 pr-4 py-3 bg-background border border-border-main rounded-lg text-text-primary focus:outline-none focus:border-accent"
+                      className="w-full pl-12 pr-4 py-3 bg-background border border-border-main rounded-lg text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:border-accent"
                     />
                   </div>
 
@@ -335,12 +472,13 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
                     <input
                       type={showPassword ? "text" : "password"}
+                      placeholder="密码（至少 8 个字符）"
                       value={registerPassword}
                       onChange={(e) => {
                         setRegisterPassword(e.target.value);
                         setRegisterError(null);
                       }}
-                      className="w-full pl-12 pr-12 py-3 bg-background border border-border-main rounded-lg text-text-primary focus:outline-none focus:border-accent"
+                      className="w-full pl-12 pr-12 py-3 bg-background border border-border-main rounded-lg text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:border-accent"
                     />
                     <button
                       type="button"
@@ -355,12 +493,13 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
                     <input
                       type={showConfirmPassword ? "text" : "password"}
+                      placeholder="再次输入密码以确认"
                       value={registerConfirmPassword}
                       onChange={(e) => {
                         setRegisterConfirmPassword(e.target.value);
                         setRegisterError(null);
                       }}
-                      className="w-full pl-12 pr-12 py-3 bg-background border border-border-main rounded-lg text-text-primary focus:outline-none focus:border-accent"
+                      className="w-full pl-12 pr-12 py-3 bg-background border border-border-main rounded-lg text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:border-accent"
                     />
                     <button
                       type="button"
@@ -378,17 +517,7 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
                       exit={{ opacity: 0, height: 0 }}
                       className="p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm"
                     >
-                      {registerError === "EMAIL_ALREADY_IN_USE" ? "该邮箱已被注册，请直接��录" : registerError}
-                    </motion.div>
-                  )}
-
-                  {registrationSuccess && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      className="p-3 bg-success/10 border border-success/30 rounded-lg text-success text-sm"
-                    >
-                      账号创建成功！即将跳转到首页...
+                      {registerError}
                     </motion.div>
                   )}
 
@@ -409,10 +538,11 @@ export default function LoginSelection({ onSocialLogin, onAuthError }: LoginSele
                     <button
                       type="button"
                       onClick={(e) => handleRegister(e as any)}
-                      disabled={isSubmitting || registrationSuccess}
-                      className="flex-1 py-3 px-4 bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50"
+                      disabled={isSubmitting}
+                      className="flex-1 py-3 px-4 bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      {isSubmitting ? "注册中..." : "创建账号"}
+                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                      {isSubmitting ? "注册中..." : "创建账号并登录"}
                     </button>
                   </div>
                 </motion.div>
