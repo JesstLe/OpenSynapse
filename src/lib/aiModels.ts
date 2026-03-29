@@ -75,7 +75,7 @@ export const AI_PROVIDERS: Record<AIProviderId, AIProviderDefinition> = {
   },
 };
 
-export const DEFAULT_TEXT_MODEL = 'minimax/MiniMax-M2.5';
+export const DEFAULT_TEXT_MODEL = 'minimax/MiniMax-M2.7';
 export const DEFAULT_STRUCTURED_MODEL = 'gemini/gemini-2.5-flash';
 export const DEFAULT_EMBEDDING_MODEL = 'zhipu/embedding-3';
 export const TEXT_MODEL_STORAGE_KEY = 'opensynapse.preferred-text-model';
@@ -228,19 +228,19 @@ export const AI_MODEL_OPTIONS: AIModelOption[] = [
     docsUrl: 'https://platform.openai.com/docs/models',
   },
   {
-    id: 'minimax/MiniMax-M2.5',
+    id: 'minimax/MiniMax-M2.7',
     provider: 'minimax',
-    model: 'MiniMax-M2.5',
-    label: 'MiniMax M2.5',
-    description: 'MiniMax 当前官方文档中的主力文本模型。',
+    model: 'MiniMax-M2.7',
+    label: 'MiniMax M2.7',
+    description: 'MiniMax 最新主力文本模型，更强的推理与多语言能力。',
     lifecycle: 'stable',
     docsUrl: 'https://platform.minimax.io/docs/guide/Models/Text%20Models',
   },
   {
-    id: 'minimax/MiniMax-M2.5-highspeed',
+    id: 'minimax/MiniMax-M2.7-highspeed',
     provider: 'minimax',
-    model: 'MiniMax-M2.5-highspeed',
-    label: 'MiniMax M2.5 Highspeed',
+    model: 'MiniMax-M2.7-highspeed',
+    label: 'MiniMax M2.7 Highspeed',
     description: 'MiniMax 低延迟版本，适合作为降级 fallback。',
     lifecycle: 'stable',
     docsUrl: 'https://platform.minimax.io/docs/guide/Models/Text%20Models',
@@ -328,7 +328,7 @@ export const MODEL_FALLBACKS: Record<string, string[]> = {
   'openai/gpt-5.3': ['openai/gpt-5.2', 'openai/gpt-5.1', 'openai/gpt-5-mini'],
   'openai/gpt-5.3-codex': ['openai/gpt-5.2-codex', 'openai/gpt-5.1-codex', 'openai/gpt-5-mini'],
   'openai/gpt-5.2-pro': ['openai/gpt-5.2', 'openai/gpt-5-mini'],
-  'minimax/MiniMax-M2.5': ['minimax/MiniMax-M2.5-highspeed'],
+  'minimax/MiniMax-M2.7': ['minimax/MiniMax-M2.7-highspeed'],
   'zhipu/glm-5': ['zhipu/glm-4.7'],
 };
 
@@ -355,7 +355,7 @@ export function parseModelSelection(value: string | null | undefined): {
 } {
   const normalized = value?.trim();
   if (!normalized) {
-    return { canonicalId: DEFAULT_TEXT_MODEL, provider: 'minimax', model: 'MiniMax-M2.5' };
+    return { canonicalId: DEFAULT_TEXT_MODEL, provider: 'minimax', model: 'MiniMax-M2.7' };
   }
 
   if (normalized.includes('/')) {
