@@ -1,10 +1,29 @@
 import { ChromaClient } from "chromadb";
 
-const client = new ChromaClient({
-  path: process.env.CHROMA_PATH || "./data/chroma",
-});
+let client: ChromaClient | null = null;
+let initError: string | null = null;
 
-type ChromaCollection = Awaited<ReturnType<typeof client.getOrCreateCollection>>;
+const CHROMA_URL = process.env.CHROMA_URL || process.env.CHROMA_PATH || "";
+
+function isHttpUrl(value: string): boolean {
+  return value.startsWith("http://") || value.startsWith("https://");
+}
+
+function getClient(): ChromaClient {
+  if (initError) {
+    throw new Error(initError);
+  }
+  if (!client) {
+    if (!isHttpUrl(CHROMA_URL)) {
+      initError = `Chroma URL 无效: "${CHROMA_URL}"。需要 http(s) 地址，如 http://localhost:8000。请设置 CHROMA_URL 环境变量。`;
+      throw new Error(initError);
+    }
+    client = new ChromaClient({ path: CHROMA_URL });
+  }
+  return client;
+}
+
+type ChromaCollection = Awaited<ReturnType<InstanceType<typeof ChromaClient>['getOrCreateCollection']>>;
 export type ChromaQueryResult = Awaited<ReturnType<ChromaCollection['query']>>;
 
 export type VectorUpsertItem = {
@@ -18,7 +37,7 @@ type ChromaFilter = Record<string, string | number | boolean>;
 
 export const vectorStore = {
   async getCollection(userId: string) {
-    return client.getOrCreateCollection({
+    return getClient().getOrCreateCollection({
       name: `notes_${userId}`,
       metadata: { userId },
     });
@@ -50,11 +69,12 @@ export const vectorStore = {
 
   async healthCheck(): Promise<{ healthy: boolean; error?: string }> {
     try {
-      const heartbeatClient = client as unknown as { heartbeat?: () => Promise<unknown> };
+      const c = getClient();
+      const heartbeatClient = c as unknown as { heartbeat?: () => Promise<unknown> };
       if (typeof heartbeatClient.heartbeat === 'function') {
         await heartbeatClient.heartbeat();
       } else {
-        await client.listCollections();
+        await c.listCollections();
       }
       return { healthy: true };
     } catch (error) {
