@@ -77,7 +77,7 @@ export const AI_PROVIDERS: Record<AIProviderId, AIProviderDefinition> = {
 };
 
 export const DEFAULT_TEXT_MODEL = 'minimax/MiniMax-M2.7';
-export const DEFAULT_STRUCTURED_MODEL = 'gemini/gemini-2.5-flash';
+export const DEFAULT_STRUCTURED_MODEL = 'minimax/MiniMax-M2.7';
 export const DEFAULT_EMBEDDING_MODEL = 'zhipu/embedding-3';
 export const TEXT_MODEL_STORAGE_KEY = 'opensynapse.preferred-text-model';
 export const STRUCTURED_MODEL_STORAGE_KEY = 'opensynapse.preferred-structured-model';

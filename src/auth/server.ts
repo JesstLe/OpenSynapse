@@ -20,8 +20,12 @@ export const auth = betterAuth({
     "http://localhost:3000",
     "http://localhost:3001",
     "http://101.133.166.67:3000",
-    "http://101.133.166.67",  // Nginx 反向代理
-    "http://101.133.166.67:80"
+    "http://101.133.166.67",
+    "http://101.133.166.67:80",
+    "http://opensynapse.top",
+    "http://www.opensynapse.top",
+    "https://opensynapse.top",
+    "https://www.opensynapse.top"
   ],
 
   // 配置代理信任，解决 "could not determine client IP address" 警告
