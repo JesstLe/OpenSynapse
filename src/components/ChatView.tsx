@@ -73,21 +73,55 @@ function ThoughtProcess({ thought, isStreaming }: { thought: string; isStreaming
 
   useEffect(() => {
     if (isStreaming && detailsRef.current) {
-      // 只有在流式输出且内容变化时，自动滚动到底部
       detailsRef.current.scrollTop = detailsRef.current.scrollHeight;
     }
   }, [thought, isStreaming]);
 
   return (
-    <details 
+    <details
       ref={detailsRef}
       className="mb-1 w-full text-xs text-text-muted bg-tertiary border border-border-main rounded-xl p-2 max-h-48 overflow-y-auto"
-      // 流式输出时默认打开
       {...(isStreaming ? { open: true } : {})}
     >
       <summary className="cursor-pointer font-bold select-none opacity-60">💭 思考过程</summary>
       <div className="mt-2 whitespace-pre-wrap font-mono text-[11px] leading-relaxed opacity-50">{thought}</div>
     </details>
+  );
+}
+
+function ThinkingIndicator({ thought, isStreaming, modelName }: { thought?: string; isStreaming: boolean; modelName: string }) {
+  const [elapsed, setElapsed] = useState(0);
+  const steps = [
+    '正在理解问题...',
+    '正在检索相关知识...',
+    '正在分析关联概念...',
+    '正在组织回答结构...',
+    '正在生成详细内容...',
+  ];
+
+  useEffect(() => {
+    if (!isStreaming) return;
+    const interval = setInterval(() => {
+      setElapsed(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isStreaming]);
+
+  const currentStep = steps[Math.min(Math.floor(elapsed / 2), steps.length - 1)];
+  const hasRealThought = thought && thought.trim().length > 0;
+
+  if (hasRealThought) {
+    return <ThoughtProcess thought={thought} isStreaming={isStreaming} />;
+  }
+
+  return (
+    <div className="mb-2 w-full text-xs text-text-muted">
+      <div className="flex items-center gap-2 bg-tertiary border border-border-main rounded-xl p-2">
+        <Loader2 className="w-3 h-3 animate-spin text-accent" />
+        <span className="font-medium">{currentStep}</span>
+        <span className="text-[10px] opacity-40">({modelName})</span>
+      </div>
+    </div>
   );
 }
 
@@ -176,7 +210,7 @@ export default function ChatView({
   const hasExtractableConversation =
     messages.some((message) => message.role === 'user' && message.text.trim()) &&
     messages.some((message, index) => index > 0 && message.role === 'model' && message.text.trim());
-  const isProcessBusy = isLoading || isProcessing || isAssetProcessing;
+  const isProcessBusy = isProcessing || isAssetProcessing || isDeconstructing;
 
   const applyModel = (modelId: string) => {
     const nextModel = setPreferredTextModel(modelId);
@@ -253,6 +287,37 @@ export default function ChatView({
     ]);
     // 保留当前的 persona，而不是重置为默认
     setShowHistory(false);
+  };
+
+  const handlePersonaSwitch = async (newPersonaId: string, newPersona: Persona) => {
+    if (newPersonaId === selectedPersonaId) return;
+
+    const hasUserMessages = messages.some(m => m.role === 'user');
+    const hasRealConversation = messages.length > 1 || hasUserMessages;
+
+    if (hasRealConversation) {
+      const sessionId = currentSessionId || crypto.randomUUID();
+      const title = messages.find(m => m.role === 'user')?.text.slice(0, 30) || '新会话';
+      await onSaveSession({
+        id: sessionId,
+        title,
+        messages: messages.filter(m => !m.thought),
+        updatedAt: Date.now(),
+        userId: '',
+        personaId: selectedPersonaId,
+      });
+
+      setCurrentSessionId(null);
+      setSelectedPersonaId(newPersonaId);
+      setMessages([
+        { role: 'model', text: `你好！我是你的${newPersona.name}。今天我们要学习什么？我可以帮你把新概念与你已有的知识连接起来。` }
+      ]);
+    } else {
+      setSelectedPersonaId(newPersonaId);
+      setMessages([
+        { role: 'model', text: `你好！我是你的${newPersona.name}。今天我们要学习什么？我可以帮你把新概念与你已有的知识连接起来。` }
+      ]);
+    }
   };
 
   const loadSession = (session: ChatSession) => {
@@ -409,9 +474,8 @@ export default function ChatView({
       let fullThought = '';
       const stream = chatWithAIStream(
         messagesToSend,
-        userId,
+        notes,
         currentPersona,
-        undefined,
         controller.signal
       );
 
@@ -739,7 +803,7 @@ export default function ChatView({
 
       <div className="flex flex-col h-full max-w-5xl xl:max-w-6xl mx-auto w-full relative">
         {/* Header */}
-        <div className="p-6 border-b border-border-main flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-primary/80 backdrop-blur-md sticky top-0 z-10">
+        <div className="px-4 py-3 border-b border-border-main flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-primary/80 backdrop-blur-md sticky top-0 z-10">
           <div className="flex items-center gap-4 text-text-main">
             <button 
               onClick={() => setShowHistory(true)}
@@ -784,9 +848,7 @@ export default function ChatView({
                   </option>
                 </select>
               </div>
-              <p className="max-w-[20rem] text-left md:text-right text-[11px] leading-relaxed text-text-muted opacity-80">
-                {currentModelOption?.description || `当前使用自定义模型：${selectedModel}`}
-              </p>
+              {/* 模型描述已隐藏以节省空间 */}
               {isCustomModel && (
                 <div className="flex flex-col gap-2 md:flex-row md:items-center">
                   <input
@@ -920,7 +982,7 @@ export default function ChatView({
 
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide relative"
+        className="flex-1 overflow-y-auto p-3 space-y-4 scrollbar-hide relative"
       >
         {messages.map((msg, i) => (
           <motion.div
@@ -933,14 +995,15 @@ export default function ChatView({
             )}
           >
             {/* 思考过程折叠展示 */}
-            {msg.role === 'model' && msg.thought && showThinking && (
-              <ThoughtProcess 
-                thought={msg.thought} 
-                isStreaming={isLoading && i === messages.length - 1} 
+            {msg.role === 'model' && showThinking && (msg.thought || (isLoading && i === messages.length - 1)) && (
+              <ThinkingIndicator
+                thought={msg.thought}
+                isStreaming={isLoading && i === messages.length - 1}
+                modelName={currentModelOption?.label || selectedModel}
               />
             )}
             <div className={cn(
-              "px-4 py-3 rounded-2xl text-sm leading-relaxed group/msg relative",
+              "px-3 py-2 rounded-2xl text-sm leading-relaxed group/msg relative",
               msg.role === 'user' 
                 ? "bg-accent text-white rounded-tr-none shadow-sm shadow-accent/10" 
                 : "bg-secondary text-text-main border border-border-main rounded-tl-none shadow-sm shadow-black/5"
@@ -1021,8 +1084,8 @@ export default function ChatView({
             </div>
           </motion.div>
         ))}
-        {isLoading && messages[messages.length - 1]?.role === 'model' && !messages[messages.length - 1]?.text && (
-          <div className="flex items-center gap-2 text-white/40 text-xs font-medium animate-pulse">
+        {isLoading && messages[messages.length - 1]?.role === 'model' && (
+          <div className="flex items-center gap-2 text-text-muted text-xs font-medium animate-pulse">
             <BrainCircuit className="w-4 h-4" />
             {messages[messages.length - 1]?.thought ? '正在生成回复...' : '导师正在思考...'}
           </div>
@@ -1143,7 +1206,7 @@ export default function ChatView({
         )}
       </AnimatePresence>
     {/* Input Section */}
-      <div className="p-4 bg-primary/80 backdrop-blur-md border-t border-border-main pb-8">
+      <div className="px-3 py-2 bg-primary/80 backdrop-blur-md border-t border-border-main pb-6">
         <div className="max-w-5xl xl:max-w-6xl mx-auto flex flex-col gap-3">
           
           <AnimatePresence>
@@ -1231,15 +1294,7 @@ export default function ChatView({
               return (
                 <button
                   key={p.id}
-                  onClick={() => {
-                    setSelectedPersonaId(p.id);
-                    if (messages.length <= 1 && messages[0]?.role === 'model') {
-                      setMessages([{ 
-                        role: 'model', 
-                        text: `你好！我是你的${p.name}。今天我们要学习什么？我可以帮你把新概念与你已有的知识连接起来。` 
-                      }]);
-                    }
-                  }}
+                  onClick={() => handlePersonaSwitch(p.id, p)}
                   className={cn(
                     "flex items-center gap-2 px-3 py-1.5 rounded-full transition-all text-xs font-bold whitespace-nowrap border shrink-0",
                     isActive 
@@ -1257,7 +1312,7 @@ export default function ChatView({
           {/* Input Box */}
           <div className="relative group/input">
             <div className="absolute -inset-1 bg-gradient-to-r from-accent/20 to-purple-500/20 rounded-3xl blur opacity-0 group-focus-within/input:opacity-100 transition duration-500"></div>
-            <div className="relative flex flex-col gap-2 p-3 bg-secondary border border-border-main rounded-2xl min-h-[60px] group-focus-within/input:border-accent/40 group-focus-within/input:ring-1 group-focus-within/input:ring-accent/40 transition-all duration-300">
+            <div className="relative flex flex-col gap-2 p-2 bg-secondary border border-border-main rounded-2xl min-h-[48px] group-focus-within/input:border-accent/40 group-focus-within/input:ring-1 group-focus-within/input:ring-accent/40 transition-all duration-300">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -1334,8 +1389,8 @@ export default function ChatView({
               </div>
             </div>
           </div>
-          <p className="text-[10px] text-center mt-2 text-text-muted opacity-50 uppercase tracking-widest font-medium">
-            按 Enter 发送 • Shift+Enter 换行
+          <p className="text-[10px] text-center mt-1 text-text-muted opacity-40 uppercase tracking-widest font-medium">
+            Enter 发送 · Shift+Enter 换行
           </p>
         </div>
       </div>
