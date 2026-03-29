@@ -169,7 +169,7 @@ router.post("/notes", requireAuth(async (req, res, userId) => {
   try {
     const { title, content, summary, tags, relatedIds, codeSnippet, source, embedding, createdAt, updatedAt } = req.body;
     const note = await noteRepo.create({
-      id: crypto.randomUUID(),
+      id: req.body.id || crypto.randomUUID(),
       title,
       content,
       summary,
