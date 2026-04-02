@@ -173,3 +173,54 @@ export const apiKeysApi = {
     });
   },
 };
+
+// Payment API
+export const paymentApi = {
+  async getConfig(): Promise<{
+    configured: boolean;
+    products: { code: string; subject: string; amount: string; body: string }[];
+  }> {
+    return fetchWithAuth(`${API_BASE}/payment/config`);
+  },
+
+  async createOrder(productCode: string): Promise<{
+    orderId: string;
+    outTradeNo: string;
+    html: string;
+  }> {
+    return fetchWithAuth(`${API_BASE}/payment/create`, {
+      method: 'POST',
+      body: JSON.stringify({ productCode }),
+    });
+  },
+
+  async getOrderStatus(orderId: string): Promise<{
+    id: string;
+    outTradeNo: string;
+    status: string;
+    totalAmount: string;
+    subject: string;
+    productCode: string;
+    paidAt: string | null;
+    createdAt: string | null;
+  }> {
+    return fetchWithAuth(`${API_BASE}/payment/status/${orderId}`);
+  },
+
+  async getOrders(): Promise<Array<{
+    id: string;
+    outTradeNo: string;
+    status: string;
+    totalAmount: string;
+    subject: string;
+    productCode: string;
+    paidAt: string | null;
+    createdAt: string | null;
+  }>> {
+    return fetchWithAuth(`${API_BASE}/payment/orders`);
+  },
+
+  async getPremiumStatus(): Promise<{ premium: boolean }> {
+    return fetchWithAuth(`${API_BASE}/payment/premium-status`);
+  },
+};

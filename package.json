@@ -21,6 +21,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "@types/d3": "^7.4.3",
     "@vitejs/plugin-react": "^5.0.4",
+    "alipay-sdk": "^4.14.0",
     "better-auth": "^1.5.6",
     "chromadb": "^3.4.0",
     "clsx": "^2.1.1",

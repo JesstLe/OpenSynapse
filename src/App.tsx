@@ -19,7 +19,8 @@ import {
   X,
   LayoutDashboard,
   Sun,
-  Moon
+  Moon,
+  CreditCard
 } from 'lucide-react';
 import { Note, Flashcard, ChatMessage, ChatSession, Persona } from './types';
 import { chatWithAI, processConversation, findSemanticLinks, generateEmbedding, BreakthroughConfig, startBreakthroughChat } from './services/gemini';
@@ -37,8 +38,8 @@ import SettingsView from './components/SettingsView';
 import LoginSelection from './components/auth/LoginSelection';
 
 import { notesApi, flashcardsApi, chatSessionsApi, personasApi } from './services/dataApi';
-
-type View = 'chat' | 'graph' | 'review' | 'notes' | 'dashboard' | 'settings';
+import { AlipayIntegrationView } from './components/AlipayIntegrationView';
+type View = 'chat' | 'graph' | 'review' | 'notes' | 'dashboard' | 'settings' | 'alipay';
 
 interface BetterAuthUser {
   id: string;
@@ -550,6 +551,13 @@ export default function App() {
             onClick={() => setActiveView('settings')}
             isDarkMode={isDarkMode}
           />
+          <NavItem
+            icon={<CreditCard size={20} />}
+            label="会员"
+            active={activeView === 'alipay'}
+            onClick={() => setActiveView('alipay')}
+            isDarkMode={isDarkMode}
+          />
         </div>
 
         <div className="p-4 space-y-2 border-t border-border-main">
@@ -749,6 +757,9 @@ export default function App() {
               onDeletePersona={handleDeletePersona}
               user={user as any}
             />
+          )}
+          {activeView === 'alipay' && (
+            <AlipayIntegrationView />
           )}
         </AnimatePresence>
       </main>

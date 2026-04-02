@@ -9,6 +9,9 @@ import { toNodeHandler } from "better-auth/node";
 import { auth } from "./src/auth/server";
 import aiRouter from './src/api/ai';
 import dataRouter from './src/api/data';
+import cliRouter from './src/api/cli';
+import paymentRouter from './src/api/payment';
+import { setupMCPServer } from './src/mcp/server';
 import {
   clearOpenAICodexCredentials,
   createOpenAICodexAuthorizationFlow,
@@ -67,6 +70,12 @@ function validateEnv() {
   } else {
     console.log('✅ Configured login providers:', configured.map(p => p.name).join(', '));
   }
+}
+
+function getBaseUrl() {
+  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+  const host = process.env.VERCEL_URL || `localhost:${process.env.PORT || 3000}`;
+  return `${protocol}://${host}`;
 }
 
 async function startServer() {
@@ -133,6 +142,19 @@ async function startServer() {
   };
 
   app.use(express.json({ limit: '50mb' }));
+
+  // Service discovery for OpenClaw
+  app.get('/.well-known/openclaw', (req, res) => {
+    res.json({
+      mcp_endpoint: `${getBaseUrl()}/mcp`,
+      name: 'opensynapse',
+      version: '1.0.0',
+      description: 'AI驱动的知识复利系统 - 智能笔记与闪卡复习',
+      features: ['save', 'import', 'review', 'search'],
+      auth_types: ['oauth', 'api_key'],
+      website: getBaseUrl()
+    });
+  });
 
   const getData = async () => {
     try {
@@ -422,6 +444,10 @@ async function startServer() {
 
   app.use('/api/ai', aiRouter);
   app.use('/api', dataRouter);
+  app.use('/api/cli', cliRouter);
+  // Payment routes - urlencoded needed for Alipay async notify callback
+  app.use('/api/payment', express.urlencoded({ extended: false }), paymentRouter);
+  setupMCPServer(app);
 
   app.get("/api/data", async (req, res) => {
     if (process.env.NODE_ENV === 'production') {

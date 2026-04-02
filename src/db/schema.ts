@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, real, integer, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, boolean, real, integer } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('user', {
   id: text('id').primaryKey(),
@@ -121,4 +121,31 @@ export const customPersonas = pgTable('custom_personas', {
   isHidden: boolean('is_hidden').default(false),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const orders = pgTable('orders', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  outTradeNo: text('out_trade_no').notNull().unique(),
+  totalAmount: text('total_amount').notNull(),
+  subject: text('subject').notNull(),
+  body: text('body'),
+  productCode: text('product_code').notNull(),
+  status: text('status').notNull().default('pending'),
+  alipayTradeNo: text('alipay_trade_no'),
+  buyerId: text('buyer_id'),
+  paidAt: timestamp('paid_at'),
+  closedAt: timestamp('closed_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const mcpApiKeys = pgTable('mcp_api_keys', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  keyHash: text('key_hash').notNull(),
+  name: text('name').notNull(),
+  scopes: text('scopes').array().notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  lastUsedAt: timestamp('last_used_at'),
 });
