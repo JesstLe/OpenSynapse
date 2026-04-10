@@ -68,7 +68,28 @@ function getUserFacingAiError(error: unknown): string {
     return 'AI 服务暂时出现内部错误，请稍后重试。如果持续出现，请切换到其他模型。';
   }
 
-  return '抱歉，我遇到了错误。请重试。';
+  if (message.includes('无法解析 JSON') || message.includes('返回了空内容')) {
+    return 'AI 模型未能返回有效的结构化数据，请重试。如果持续出现，请尝试切换模型。';
+  }
+
+  if (message.includes('Failed to generate content')) {
+    // 提取服务端返回的实际错误信息
+    const serverErrorMatch = message.match(/Failed to generate content:\s*(.*)/);
+    const serverError = serverErrorMatch ? serverErrorMatch[1].trim() : '';
+    try {
+      const parsed = JSON.parse(serverError);
+      if (parsed.error) {
+        return `AI 服务错误：${parsed.error}`;
+      }
+    } catch {}
+    if (serverError) {
+      return `AI 服务错误：${serverError.substring(0, 150)}`;
+    }
+  }
+
+  // 兜底：包含实际错误信息便于排查
+  const brief = message.length > 150 ? message.substring(0, 150) + '...' : message;
+  return `遇到未预期的错误：${brief}`;
 }
 
 // 思考过程组件，处理自动滚动
@@ -600,7 +621,7 @@ export default function ChatView({
       // Step 3: Success
       setAssetProcessStatus('success');
       // 给用户一点时间看到成功的提示
-      await new Promise(resolve => setTimeout(resolve, 800));
+await new Promise(resolve => setTimeout(resolve, 400));
     } catch (error) {
       console.error('提取资产失败:', error);
       setMessages(prev => [...prev, {

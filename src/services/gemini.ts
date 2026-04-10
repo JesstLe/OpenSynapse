@@ -439,8 +439,13 @@ function safeJsonParse(text: string): any {
 
 // ─── 知识提炼 ───
 
+const MAX_CONVERSATION_MESSAGES = 60;
+
 export async function processConversation(chatHistory: string[]): Promise<{ note: Partial<Note>, flashcards: Partial<Flashcard>[] }> {
   const modelId = getPreferredStructuredModel();
+  const truncatedHistory = chatHistory.length > MAX_CONVERSATION_MESSAGES
+    ? chatHistory.slice(0, 15).concat(['...(中间省略若干轮)...']).concat(chatHistory.slice(-45))
+    : chatHistory;
   const prompt = `你是一位严谨的计算机科学导师。请分析以下对话，提取出核心知识点。
 
 对于每一个知识点，请生成：
@@ -467,7 +472,7 @@ export async function processConversation(chatHistory: string[]): Promise<{ note
 }
 
 对话内容：
-${chatHistory.join("\n")}
+${truncatedHistory.join("\n")}
 `;
 
   const response = await ai.models.generateContent({
@@ -478,7 +483,12 @@ ${chatHistory.join("\n")}
     },
   });
 
-  return safeJsonParse(response.text);
+  const text = response.text;
+  if (!text || typeof text !== 'string' || !text.trim()) {
+    throw new Error(`AI 模型返回了空内容，无法提取资产。请重试或切换到其他模型。`);
+  }
+
+  return safeJsonParse(text);
 }
 
 export async function findSemanticLinks(newNote: Note, existingNotes: Note[]): Promise<string[]> {

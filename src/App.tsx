@@ -304,18 +304,6 @@ export default function App() {
         note.codeSnippet = newNoteData.codeSnippet;
       }
 
-      try {
-        const embeddingText = `${note.title} ${note.summary} ${note.tags.join(' ')}`;
-        (note as any).embedding = await generateEmbedding(embeddingText);
-      } catch (e) {
-        if (!isEmbeddingUnsupportedError(e)) {
-          console.warn("Failed to generate embedding:", e);
-        }
-      }
-
-      const relatedIds = await findSemanticLinks(note, notes);
-      note.relatedIds = relatedIds;
-
       const cards: Flashcard[] = newFlashcards.map(cf => ({
         id: generateUUID(),
         noteId: noteId,
@@ -330,6 +318,21 @@ export default function App() {
         userId: effectiveUserId,
       } as any));
 
+      // 并行：embedding 生成 + 语义链接（embedding 完成后才能做本地相似度）
+      const embeddingText = `${note.title} ${note.summary} ${note.tags.join(' ')}`;
+      const embeddingResult = await generateEmbedding(embeddingText).catch(e => {
+        if (!isEmbeddingUnsupportedError(e)) {
+          console.warn("Failed to generate embedding:", e);
+        }
+        return [] as number[];
+      });
+      (note as any).embedding = embeddingResult;
+
+      // embedding 可用时做本地相似度，不可用时跳过（避免额外 AI 调用）
+      if (embeddingResult.length > 0) {
+        note.relatedIds = await findSemanticLinks(note, notes);
+      }
+
       if (isUsingDevAuthBypass || !user) {
         setNotes(prev => [note, ...prev.filter(existing => existing.id !== note.id)]);
         setFlashcards(prev => [...cards, ...prev.filter(existing => !cards.some(card => card.id === existing.id))]);
@@ -337,27 +340,42 @@ export default function App() {
         return;
       }
 
+      // 并行：保存笔记 + 批量保存闪卡
       let persistedNote: Note = note;
-      try {
-        const saved = await notesApi.create(sanitizeNoteForStorage(note) as any);
-        persistedNote = {
-          ...note,
-          ...saved,
-          embedding: Array.isArray((saved as any).embedding)
-            ? (saved as any).embedding
-            : note.embedding,
-        };
-      } catch (error) {
-        console.error('Failed to save note:', error);
-      }
-
-      for (const card of cards) {
-        try {
-          await flashcardsApi.create(card);
-        } catch (error) {
-          console.error('Failed to save flashcard:', error);
-        }
-      }
+      const [, batchResult] = await Promise.all([
+        (async () => {
+          try {
+            const saved = await notesApi.create(sanitizeNoteForStorage(note) as any);
+            persistedNote = {
+              ...note,
+              ...saved,
+              embedding: Array.isArray((saved as any).embedding)
+                ? (saved as any).embedding
+                : note.embedding,
+            };
+          } catch (error) {
+            console.error('Failed to save note:', error);
+          }
+        })(),
+        (async () => {
+          if (cards.length === 0) return [];
+          try {
+            return await flashcardsApi.createBatch(cards);
+          } catch (error) {
+            console.error('批量保存闪卡失败，回退逐条保存:', error);
+            const results: Flashcard[] = [];
+            for (const card of cards) {
+              try {
+                const saved = await flashcardsApi.create(card);
+                results.push(saved);
+              } catch (e) {
+                console.error('Failed to save flashcard:', e);
+              }
+            }
+            return results;
+          }
+        })(),
+      ]);
 
       setNotes(prev => [persistedNote, ...prev.filter(existing => existing.id !== persistedNote.id)]);
       setFlashcards(prev => [...cards, ...prev]);

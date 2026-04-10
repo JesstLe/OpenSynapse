@@ -73,6 +73,13 @@ export const flashcardsApi = {
     });
   },
 
+  async createBatch(cards: Omit<Flashcard, "id">[]): Promise<Flashcard[]> {
+    return fetchWithAuth(`${API_BASE}/flashcards/batch`, {
+      method: "POST",
+      body: JSON.stringify({ cards }),
+    });
+  },
+
   async update(id: string, card: Partial<Flashcard>): Promise<Flashcard> {
     return fetchWithAuth(`${API_BASE}/flashcards/${id}`, {
       method: "PUT",

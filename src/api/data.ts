@@ -323,6 +323,35 @@ router.post("/flashcards", requireAuth(async (req, res, userId) => {
   }
 }));
 
+router.post("/flashcards/batch", requireAuth(async (req, res, userId) => {
+  try {
+    const { cards } = req.body;
+    if (!Array.isArray(cards) || cards.length === 0) {
+      return res.status(400).json({ error: "cards must be a non-empty array" });
+    }
+    const items = cards.map((c: any) => ({
+      id: c.id || crypto.randomUUID(),
+      question: c.question,
+      answer: c.answer,
+      stability: c.stability,
+      difficulty: c.difficulty,
+      elapsedDays: c.elapsedDays,
+      scheduledDays: c.scheduledDays,
+      state: c.state,
+      noteId: c.noteId,
+      userId,
+      due: c.nextReview !== undefined ? toDbDate(c.nextReview) : new Date(),
+      reps: c.repetitions !== undefined ? c.repetitions : 0,
+      createdAt: toDbDate(c.createdAt),
+    }));
+    const created = await flashcardRepo.createBatch(items);
+    res.json(created.map(mapFlashcardToFrontend));
+  } catch (error) {
+    console.error("Failed to batch create flashcards:", error);
+    res.status(500).json({ error: "Failed to batch create flashcards" });
+  }
+}));
+
 router.put("/flashcards/:id", requireAuth(async (req, res, userId) => {
   try {
     const existing = await flashcardRepo.findById(req.params.id);

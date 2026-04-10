@@ -11,6 +11,12 @@ export const flashcardRepo = {
     return result[0];
   },
 
+  async createBatch(items: NewFlashcard[]) {
+    if (items.length === 0) return [];
+    const results = await db.insert(flashcards).values(items).returning();
+    return results;
+  },
+
   async findById(id: string) {
     return db.query.flashcards.findFirst({
       where: eq(flashcards.id, id),
