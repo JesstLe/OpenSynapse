@@ -19,8 +19,10 @@ export interface ParsedConversation {
 /** 解析器返回（可能是一条或多条对话） */
 export interface ParseResult {
   conversations: ParsedConversation[];
-  format: 'json' | 'markdown' | 'text';
+  format: 'json' | 'markdown' | 'text' | 'ai_parsed' | 'raw';
   warnings: string[];
+  confidence?: number;
+  usedParser?: string;
 }
 
 // ─── 角色映射 ───

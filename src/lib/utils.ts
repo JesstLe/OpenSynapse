@@ -20,3 +20,15 @@ export function generateUUID(): string {
     return v.toString(16);
   });
 }
+
+/**
+ * Safely parse JSON string with fallback
+ * Returns null if parsing fails
+ */
+export function safeJsonParse<T = unknown>(str: string): T | null {
+  try {
+    return JSON.parse(str) as T;
+  } catch {
+    return null;
+  }
+}

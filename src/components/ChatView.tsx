@@ -64,6 +64,10 @@ function getUserFacingAiError(error: unknown): string {
     return '当前服务端还没有可用的 AI 凭证。请先完成 Gemini CLI 风格登录，或配置 GEMINI_API_KEY。';
   }
 
+  if (message.includes('500 Internal Server Error') || message.includes('system error') || message.includes('api_error')) {
+    return 'AI 服务暂时出现内部错误，请稍后重试。如果持续出现，请切换到其他模型。';
+  }
+
   return '抱歉，我遇到了错误。请重试。';
 }
 

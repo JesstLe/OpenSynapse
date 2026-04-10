@@ -35,7 +35,16 @@ export interface ChatMessage {
 }
 
 // 对话来源标记
-export type ChatSessionSource = 'native' | 'gemini_import' | 'chatgpt_import' | 'custom_import' | 'markdown_import' | 'text_import';
+export type ChatSessionSource = 
+  | 'native' 
+  | 'gemini_import' 
+  | 'chatgpt_import' 
+  | 'claude_import'
+  | 'custom_import' 
+  | 'markdown_import' 
+  | 'text_import'
+  | 'ai_import'
+  | 'raw_import';
 
 export interface Persona {
   id: string;           // 唯一标识 (如 'cs-tutor', 'math-expert')

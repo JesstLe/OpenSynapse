@@ -22,14 +22,19 @@ import {
 import { cn } from '../lib/utils';
 import { ChatSession } from '../types';
 import {
-  autoDetectAndParse,
   toSessions,
   checkDuplicate,
   parseCustomFormat,
-  ParseResult,
-  ParsedConversation,
   CustomFormatConfig,
 } from '../services/importParsers';
+import {
+  parseImportUniversal,
+} from '../services/universalImportParser';
+import type { ParseResult, ParsedConversation } from '../services/importParsers';
+
+interface AIService {
+  generate(prompt: string, options?: { model?: string }): Promise<string>;
+}
 
 // ─── 类型 ───
 
@@ -52,6 +57,29 @@ interface PreviewState {
   result: ParseResult;
   sessions: ChatSession[];
   duplicates: { session: ChatSession; existing: ChatSession }[];
+}
+
+// ─── AI 服务（用于智能解析）───
+
+function createSimpleAIService(): AIService {
+  return {
+    async generate(prompt: string): Promise<string> {
+      // 调用默认模型进行解析
+      // 这里使用 fetch 直接调用 API
+      const response = await fetch('/api/ai/parse-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('AI 解析请求失败');
+      }
+      
+      const data = await response.json();
+      return data.result;
+    },
+  };
 }
 
 // ─── 格式图标 ───
@@ -117,7 +145,11 @@ export default function ImportDialog({
     setImportSuccess(null);
 
     try {
-      const result = autoDetectAndParse(content, filename);
+      const result = await parseImportUniversal(content, {
+        filename,
+        useAI: true,
+        aiService: createSimpleAIService(),
+      });
       const sessions = await toSessions(result, userId);
 
       // 去重检查

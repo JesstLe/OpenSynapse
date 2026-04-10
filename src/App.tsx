@@ -200,7 +200,7 @@ export default function App() {
       }).catch(() => {
         // 服务器不可达时静默忽略，等待下次轮询重试
       });
-    }, 2000);
+    }, 30_000);
 
     return () => {
       cancelled = true;
